@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: infra-memory-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - infra_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: infra-memory-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - infra_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Backend.Dockerfile
+    container_name: infra-memory-backend
+    restart: always
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ENV=${ENV}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - infra_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Frontend.Dockerfile
+    container_name: infra-memory-frontend
+    restart: always
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - infra_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  infra_network:
+    driver: bridge
