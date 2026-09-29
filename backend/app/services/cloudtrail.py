@@ -18,7 +18,7 @@ def _resource_details(event: dict) -> tuple[str | None, str | None]:
 
 
 def _actor(event: dict) -> str | None:
-    identity = event.get("Username") or event.get("Resources", [{}])[0].get("Username") if event.get("Resources") else event.get("Username")
+    identity = event.get("Username")
     if identity:
         return str(identity)
     return None
