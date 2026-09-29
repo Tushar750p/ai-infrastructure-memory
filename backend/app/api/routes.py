@@ -420,6 +420,39 @@ def resource_fix_memory(
     }
 
 
+@router.post("/organizations/{organization_id}/incidents/detect")
+def detect_incidents(
+    organization_id: int,
+    lookback_minutes: int = 15,
+    db: Session = Depends(get_db),
+):
+    accounts = db.scalars(
+        select(AWSAccount).where(
+            AWSAccount.organization_id == organization_id,
+            AWSAccount.enabled.is_(True),
+        )
+    ).all()
+
+    from app.services.incident_detection import detect_incidents_for_account
+
+    detected = 0
+    for account in accounts:
+        detected += detect_incidents_for_account(
+            db,
+            organization_id=organization_id,
+            aws_account_id=account.id,
+            lookback_minutes=lookback_minutes,
+        )
+
+    return {
+        "organization_id": organization_id,
+        "accounts_checked": len(accounts),
+        "incidents_created": detected,
+        "window_minutes": max(1, min(lookback_minutes, 120)),
+        "message": "Candidate incidents detected from high-signal infrastructure changes",
+    }
+
+
 @router.get("/organizations/{organization_id}/incidents")
 def list_incidents(
     organization_id: int,
