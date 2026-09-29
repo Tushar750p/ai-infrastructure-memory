@@ -35,6 +35,7 @@ type EventItem = {
 
 export default function Home() {
   const [organizationId, setOrganizationId] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -70,12 +71,18 @@ export default function Home() {
   const [knowledgeGraph, setKnowledgeGraph] = useState<any>(null);
   const [knowledgeGraphLoading, setKnowledgeGraphLoading] = useState(false);
 
+  async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+    const headers = new Headers(init.headers);
+    if (apiKey) headers.set("X-AIME-API-Key", apiKey);
+    return fetch(input, { ...init, headers });
+  }
+
   async function loadEvents() {
     if (!organizationId) return;
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/events?limit=100",
         { cache: "no-store" },
       );
@@ -101,11 +108,12 @@ export default function Home() {
     setConnectMessage("");
     setError("");
     try {
-      const response = await fetch(API_BASE + "/api/aws/accounts", {
+      const response = await apiFetch(API_BASE + "/api/aws/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organization_name: orgName,
+          ...(apiKey ? { api_key: apiKey } : {}),
           access_key_id: accessKey,
           secret_access_key: secretKey,
           region,
@@ -113,6 +121,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "AWS connection failed");
+      if (data.api_key) setApiKey(String(data.api_key));
       setOrganizationId(String(data.organization_id));
       setAwsAccountId(String(data.account_id));
       setConnectMessage("AWS account connected successfully.");
@@ -132,7 +141,7 @@ export default function Home() {
     setSyncMessage("");
     setError("");
     try {
-      const response = await fetch(API_BASE + "/api/aws/accounts/" + awsAccountId + "/cloudtrail/sync", { method: "POST" });
+      const response = await apiFetch(API_BASE + "/api/aws/accounts/" + awsAccountId + "/cloudtrail/sync", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "CloudTrail sync failed");
       setSyncMessage("CloudTrail sync complete. " + data.events_inserted + " new event(s) added.");
@@ -150,7 +159,7 @@ export default function Home() {
     if (!organizationId) return;
     setGraphLoading(true);
     try {
-      const response = await fetch(API_BASE + "/api/organizations/" + organizationId + "/graph", { cache: "no-store" });
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organizationId + "/graph", { cache: "no-store" });
       if (!response.ok) throw new Error("Graph API returned " + response.status);
       const data = await response.json();
       setGraphNodes(data.nodes || []);
@@ -173,14 +182,14 @@ export default function Home() {
     setKnowledgeGraphLoading(true);
     setKnowledgeGraph(null);
     try {
-      const timelineResponse = await fetch(
+      const timelineResponse = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/timeline?lookback_minutes=120&limit=100",
         { cache: "no-store" },
       );
       const timeline = await timelineResponse.json();
       if (!timelineResponse.ok || !timeline.incident?.id) return;
 
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/incidents/" + timeline.incident.id + "/knowledge-graph",
         { cache: "no-store" },
       );
@@ -198,14 +207,14 @@ export default function Home() {
     setIncidentIntelligenceLoading(true);
     setIncidentIntelligence(null);
     try {
-      const timelineResponse = await fetch(
+      const timelineResponse = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/timeline?lookback_minutes=120&limit=100",
         { cache: "no-store" },
       );
       const timeline = await timelineResponse.json();
       if (!timelineResponse.ok || !timeline.incident?.id) return;
 
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/incidents/" + timeline.incident.id + "/intelligence?lookback_minutes=120&limit=100",
         { cache: "no-store" },
       );
@@ -222,7 +231,7 @@ export default function Home() {
     if (!organizationId) return;
     setIncidentTimelineLoading(true);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/timeline?lookback_minutes=120&limit=100",
         { cache: "no-store" },
       );
@@ -246,7 +255,7 @@ export default function Home() {
     loadResourceKnowledgeGraph(resourceId);
     loadSimilarFixesForResource(resourceId);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/fix-memory?limit=10",
         { cache: "no-store" },
       );
@@ -266,7 +275,7 @@ export default function Home() {
     if (!organizationId) return;
     setIncidentTimelineLoading(true);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/incidents/" + incidentId + "/timeline?lookback_minutes=120&limit=100",
         { cache: "no-store" },
       );
@@ -283,7 +292,7 @@ export default function Home() {
     if (!organizationId) return;
     setSimilarFixesLoading(true);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/similar-fixes?limit=5",
         { cache: "no-store" },
       );
@@ -300,7 +309,7 @@ export default function Home() {
     if (!organizationId) return;
     setSimilarFixesLoading(true);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/incidents/" + incidentId + "/similar-fixes?limit=5",
         { cache: "no-store" },
       );
@@ -319,7 +328,7 @@ export default function Home() {
     setRca(null);
     loadFixMemory(resourceId);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/rca?lookback_minutes=60&limit=25",
         { cache: "no-store" },
       );
@@ -339,7 +348,7 @@ export default function Home() {
     loadRca(resourceId);
     setCorrelation(null);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/correlation?lookback_minutes=60&limit=25",
         { cache: "no-store" },
       );
@@ -359,7 +368,7 @@ export default function Home() {
     setIncidentMessage("");
     setError("");
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         API_BASE + "/api/organizations/" + organizationId + "/incidents/detect?lookback_minutes=15",
         { method: "POST" },
       );
@@ -379,7 +388,7 @@ export default function Home() {
     setInventoryMessage("");
     setError("");
     try {
-      const response = await fetch(API_BASE + "/api/aws/accounts/" + awsAccountId + "/inventory/sync", { method: "POST" });
+      const response = await apiFetch(API_BASE + "/api/aws/accounts/" + awsAccountId + "/inventory/sync", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Inventory sync failed");
       setInventoryMessage("AWS inventory sync complete. " + data.resources_discovered + " resource(s) scanned.");
