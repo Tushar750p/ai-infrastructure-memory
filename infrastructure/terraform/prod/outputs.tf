@@ -4,3 +4,6 @@ output "frontend_ecr_repository_url" { value=aws_ecr_repository.frontend.reposit
 output "rds_endpoint" { value=aws_db_instance.this.address }
 output "redis_endpoint" { value=aws_elasticache_replication_group.this.primary_endpoint_address }
 output "ecs_cluster_name" { value=aws_ecs_cluster.this.name }
+output "private_subnet_ids" { value=aws_subnet.private[*].id }
+output "ecs_security_group_id" { value=aws_security_group.ecs.id }
+output "migration_task_definition" { value=aws_ecs_task_definition.migrate.arn }
