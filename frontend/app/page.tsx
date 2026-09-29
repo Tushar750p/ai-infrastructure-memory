@@ -67,6 +67,8 @@ export default function Home() {
   const [incidentTimelineLoading, setIncidentTimelineLoading] = useState(false);
   const [incidentIntelligence, setIncidentIntelligence] = useState<any>(null);
   const [incidentIntelligenceLoading, setIncidentIntelligenceLoading] = useState(false);
+  const [knowledgeGraph, setKnowledgeGraph] = useState<any>(null);
+  const [knowledgeGraphLoading, setKnowledgeGraphLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -165,6 +167,32 @@ export default function Home() {
 
 
 
+
+  async function loadResourceKnowledgeGraph(resourceId: number) {
+    if (!organizationId) return;
+    setKnowledgeGraphLoading(true);
+    setKnowledgeGraph(null);
+    try {
+      const timelineResponse = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/timeline?lookback_minutes=120&limit=100",
+        { cache: "no-store" },
+      );
+      const timeline = await timelineResponse.json();
+      if (!timelineResponse.ok || !timeline.incident?.id) return;
+
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/incidents/" + timeline.incident.id + "/knowledge-graph",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Knowledge graph API returned " + response.status);
+      setKnowledgeGraph(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load incident knowledge graph");
+    } finally {
+      setKnowledgeGraphLoading(false);
+    }
+  }
+
   async function loadResourceIntelligence(resourceId: number) {
     if (!organizationId) return;
     setIncidentIntelligenceLoading(true);
@@ -215,6 +243,7 @@ export default function Home() {
     setIncidentTimeline(null);
     loadResourceTimeline(resourceId);
     loadResourceIntelligence(resourceId);
+    loadResourceKnowledgeGraph(resourceId);
     loadSimilarFixesForResource(resourceId);
     try {
       const response = await fetch(
@@ -442,6 +471,20 @@ export default function Home() {
 
 
 
+
+          {knowledgeGraphLoading && <p style={{ marginTop: 12, color: "#a78bfa" }}>Building incident knowledge graph...</p>}
+          {knowledgeGraph?.edges?.length > 0 && (
+            <div style={{ marginTop: 12, background: "#0f172a", border: "1px solid #334155", borderRadius: 10, padding: 16 }}>
+              <strong>Incident Knowledge Graph</strong>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {knowledgeGraph.edges.map((edge: any, index: number) => (
+                  <span key={index} style={{ padding: "6px 9px", borderRadius: 999, background: "#1e293b", color: "#cbd5e1", fontSize: 10 }}>
+                    {edge.relationship} · {edge.entity_type} #{edge.entity_id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {incidentIntelligenceLoading && <p style={{ marginTop: 12, color: "#f59e0b" }}>Analyzing incident evidence...</p>}
           {incidentIntelligence?.intelligence && (
             <div style={{ marginTop: 12, background: "#111827", border: "1px solid #334155", borderRadius: 10, padding: 16 }}>
