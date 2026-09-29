@@ -141,6 +141,13 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const savedOrganizationId = window.localStorage.getItem("aime.organizationId");
+    const savedApiKey = window.localStorage.getItem("aime.apiKey");
+    if (savedOrganizationId) setOrganizationId(savedOrganizationId);
+    if (savedApiKey) setApiKey(savedApiKey);
+  }, []);
+
+  useEffect(() => {
     if (organizationId) {
       loadEvents();
       loadIncidents();
@@ -166,8 +173,13 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "AWS connection failed");
-      if (data.api_key) setApiKey(String(data.api_key));
+      if (data.api_key) {
+        const nextApiKey = String(data.api_key);
+        setApiKey(nextApiKey);
+        window.localStorage.setItem("aime.apiKey", nextApiKey);
+      }
       setOrganizationId(String(data.organization_id));
+      window.localStorage.setItem("aime.organizationId", String(data.organization_id));
       setAwsAccountId(String(data.account_id));
       setConnectMessage("AWS account connected successfully.");
       setAccessKey("");
@@ -180,6 +192,22 @@ export default function Home() {
     }
   }
 
+
+  async function rotateApiKey() {
+    if (!organizationId || !apiKey) return;
+    setError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organizationId + "/api-key/rotate", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "API key rotation failed");
+      const nextApiKey = String(data.api_key);
+      setApiKey(nextApiKey);
+      window.localStorage.setItem("aime.apiKey", nextApiKey);
+      setConnectMessage("API key rotated successfully. Store the new key securely.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "API key rotation failed");
+    }
+  }
 
   async function checkAwsHealth() {
     if (!organizationId || !awsAccountId) return;
@@ -493,6 +521,11 @@ export default function Home() {
             {connecting ? "Verifying AWS..." : "Connect AWS"}
           </button>
           {connectMessage && <p style={{ color: "#4ade80" }}>{connectMessage}</p>}
+          {organizationId && apiKey && (
+            <button onClick={rotateApiKey} style={{ marginTop: 8, background: "#475569", border: 0, borderRadius: 8, padding: "9px 14px", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+              Rotate AIME API Key
+            </button>
+          )}
           {awsAccountId && (
             <>
     
