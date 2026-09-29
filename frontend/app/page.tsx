@@ -191,6 +191,30 @@ export default function Home() {
     }
   }
 
+  async function resendVerification() {
+    if (!authEmail) {
+      setAuthMessage("Enter your email first.");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(API_BASE + "/api/auth/email-verification/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: authEmail }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Unable to resend verification email");
+      setAuthMessage("If verification is required, a new email has been sent.");
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : "Unable to resend verification email");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function requestPasswordReset() {
     if (!authEmail) {
       setAuthMessage("Enter your email first.");
@@ -782,6 +806,8 @@ export default function Home() {
                 <button onClick={login} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: 0, background: "#2563eb", color: "white" }}>Sign in</button>
                 <button onClick={register} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Create account</button>
                 <button onClick={requestPasswordReset} disabled={authLoading || !authEmail} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#94a3b8" }}>Forgot password?</button>
+                <button onClick={resendVerification} disabled={authLoading || !authEmail} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#94a3b8" }}>Resend verification</button>
+
               </div>
             )}
           </div>
