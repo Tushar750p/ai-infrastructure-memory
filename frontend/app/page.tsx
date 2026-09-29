@@ -65,6 +65,8 @@ export default function Home() {
   const [similarFixesLoading, setSimilarFixesLoading] = useState(false);
   const [incidentTimeline, setIncidentTimeline] = useState<any>(null);
   const [incidentTimelineLoading, setIncidentTimelineLoading] = useState(false);
+  const [incidentIntelligence, setIncidentIntelligence] = useState<any>(null);
+  const [incidentIntelligenceLoading, setIncidentIntelligenceLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -162,6 +164,32 @@ export default function Home() {
 
 
 
+
+  async function loadResourceIntelligence(resourceId: number) {
+    if (!organizationId) return;
+    setIncidentIntelligenceLoading(true);
+    setIncidentIntelligence(null);
+    try {
+      const timelineResponse = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/timeline?lookback_minutes=120&limit=100",
+        { cache: "no-store" },
+      );
+      const timeline = await timelineResponse.json();
+      if (!timelineResponse.ok || !timeline.incident?.id) return;
+
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/incidents/" + timeline.incident.id + "/intelligence?lookback_minutes=120&limit=100",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Incident intelligence API returned " + response.status);
+      setIncidentIntelligence(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load incident intelligence");
+    } finally {
+      setIncidentIntelligenceLoading(false);
+    }
+  }
+
   async function loadResourceTimeline(resourceId: number) {
     if (!organizationId) return;
     setIncidentTimelineLoading(true);
@@ -186,6 +214,7 @@ export default function Home() {
     setSimilarFixes(null);
     setIncidentTimeline(null);
     loadResourceTimeline(resourceId);
+    loadResourceIntelligence(resourceId);
     loadSimilarFixesForResource(resourceId);
     try {
       const response = await fetch(
@@ -412,6 +441,20 @@ export default function Home() {
 
 
 
+
+          {incidentIntelligenceLoading && <p style={{ marginTop: 12, color: "#f59e0b" }}>Analyzing incident evidence...</p>}
+          {incidentIntelligence?.intelligence && (
+            <div style={{ marginTop: 12, background: "#111827", border: "1px solid #334155", borderRadius: 10, padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <strong>Incident Intelligence</strong>
+                <span style={{ color: "#fbbf24", fontWeight: 700 }}>{incidentIntelligence.intelligence.score}/100 · {incidentIntelligence.intelligence.confidence}</span>
+              </div>
+              <div style={{ color: "#cbd5e1", fontSize: 12, marginTop: 8 }}>{incidentIntelligence.intelligence.summary}</div>
+              {incidentIntelligence.intelligence.evidence_reasons?.map((reason: string, index: number) => (
+                <div key={index} style={{ color: "#94a3b8", fontSize: 11, marginTop: 5 }}>• {reason}</div>
+              ))}
+            </div>
+          )}
           {incidentTimelineLoading && <p style={{ marginTop: 12, color: "#38bdf8" }}>Building incident timeline...</p>}
           {incidentTimeline?.timeline?.length > 0 && (
             <div style={{ marginTop: 12, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
