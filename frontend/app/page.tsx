@@ -32,6 +32,8 @@ export default function Home() {
   const [awsAccountId, setAwsAccountId] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [inventorySyncing, setInventorySyncing] = useState(false);
+  const [inventoryMessage, setInventoryMessage] = useState("");
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -104,6 +106,24 @@ export default function Home() {
     }
   }
 
+
+  async function syncInventory() {
+    if (!awsAccountId) return;
+    setInventorySyncing(true);
+    setInventoryMessage("");
+    setError("");
+    try {
+      const response = await fetch(API_BASE + "/api/aws/accounts/" + awsAccountId + "/inventory/sync", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Inventory sync failed");
+      setInventoryMessage("AWS inventory sync complete. " + data.resources_discovered + " resource(s) scanned.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Inventory sync failed");
+    } finally {
+      setInventorySyncing(false);
+    }
+  }
+
   return (
     <main style={{ minHeight: "100vh", background: "#07111f", color: "#e2e8f0", padding: "40px", fontFamily: "Arial, sans-serif" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
@@ -133,11 +153,17 @@ export default function Home() {
           </button>
           {connectMessage && <p style={{ color: "#4ade80" }}>{connectMessage}</p>}
           {awsAccountId && (
-            <button onClick={syncCloudTrail} disabled={syncing} style={{ marginTop: 8, marginLeft: 8, background: "#7c3aed", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: syncing ? 0.6 : 1 }}>
-              {syncing ? "Syncing CloudTrail..." : "Sync CloudTrail"}
-            </button>
+            <>
+              <button onClick={syncCloudTrail} disabled={syncing} style={{ marginTop: 8, marginLeft: 8, background: "#7c3aed", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: syncing ? 0.6 : 1 }}>
+                {syncing ? "Syncing CloudTrail..." : "Sync CloudTrail"}
+              </button>
+              <button onClick={syncInventory} disabled={inventorySyncing} style={{ marginTop: 8, marginLeft: 8, background: "#0891b2", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: inventorySyncing ? 0.6 : 1 }}>
+                {inventorySyncing ? "Discovering AWS..." : "Sync Infrastructure"}
+              </button>
+            </>
           )}
           {syncMessage && <p style={{ color: "#a78bfa" }}>{syncMessage}</p>}
+          {inventoryMessage && <p style={{ color: "#67e8f9" }}>{inventoryMessage}</p>}
         </section>
 
         <section style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
