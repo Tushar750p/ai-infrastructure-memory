@@ -15,6 +15,7 @@ from app.models.organization import Organization
 from app.services.aws_credentials import build_aws_session, encrypt_secret
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
+from app.services.correlation import correlate_resource_changes
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -144,6 +145,31 @@ def infrastructure_graph(organization_id: int, db: Session = Depends(get_db)):
             for relationship in relationships
         ],
     }
+
+
+@router.get("/organizations/{organization_id}/resources/{resource_id}/correlation")
+def resource_correlation(
+    organization_id: int,
+    resource_id: int,
+    lookback_minutes: int = 60,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    return correlate_resource_changes(
+        db,
+        resource,
+        lookback_minutes=lookback_minutes,
+        limit=limit,
+    )
 
 
 @router.post("/aws/accounts/{account_id}/inventory/sync")
