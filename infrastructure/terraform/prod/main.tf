@@ -167,8 +167,17 @@ resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.this.arn; port = 80; protocol = "HTTP"
   default_action { type = "forward"; target_group_arn = aws_lb_target_group.frontend.arn }
 }
+resource "aws_lb_listener" "https" {
+  count = var.acm_certificate_arn == "" ? 0 : 1
+  load_balancer_arn = aws_lb.this.arn
+  port = 443
+  protocol = "HTTPS"
+  certificate_arn = var.acm_certificate_arn
+  ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  default_action { type = "forward"; target_group_arn = aws_lb_target_group.frontend.arn }
+}
 resource "aws_lb_listener_rule" "api" {
-  listener_arn = aws_lb_listener.http.arn; priority = 100
+  listener_arn = var.acm_certificate_arn == "" ? aws_lb_listener.http.arn : aws_lb_listener.https[0].arn; priority = 100
   condition { path_pattern { values = ["/api/*"] } }
   action { type = "forward"; target_group_arn = aws_lb_target_group.backend.arn }
 }
@@ -203,6 +212,27 @@ resource "aws_ecs_task_definition" "backend" {
     logConfiguration = { logDriver="awslogs", options={ awslogs-group=aws_cloudwatch_log_group.backend.name, awslogs-region=var.aws_region, awslogs-stream-prefix="backend" } }
   }])
 }
+resource "aws_ecs_task_definition" "migrate" {
+  family = "${local.name}-migrate"
+  requires_compatibilities = ["FARGATE"]
+  network_mode = "awsvpc"
+  cpu = 256
+  memory = 512
+  execution_role_arn = aws_iam_role.execution.arn
+  task_role_arn = aws_iam_role.task.arn
+  container_definitions = jsonencode([{
+    name = "migrate"
+    image = var.backend_image
+    essential = true
+    command = ["alembic", "upgrade", "head"]
+    environment = [
+      { name="DATABASE_URL", value="postgresql+psycopg2://${var.db_username}:${var.db_password}@${aws_db_instance.this.address}:5432/${var.db_name}" },
+      { name="CREDENTIALS_ENCRYPTION_KEY", value=var.credentials_encryption_key }
+    ]
+    logConfiguration = { logDriver="awslogs", options={ awslogs-group=aws_cloudwatch_log_group.backend.name, awslogs-region=var.aws_region, awslogs-stream-prefix="migrate" } }
+  }])
+}
+
 resource "aws_ecs_service" "frontend" {
   name = "${local.name}-frontend"; cluster = aws_ecs_cluster.this.id; task_definition = aws_ecs_task_definition.frontend.arn
   desired_count = 2; launch_type = "FARGATE"
