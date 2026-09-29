@@ -29,6 +29,9 @@ export default function Home() {
   const [region, setRegion] = useState("us-east-1");
   const [connecting, setConnecting] = useState(false);
   const [connectMessage, setConnectMessage] = useState("");
+  const [awsAccountId, setAwsAccountId] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -71,6 +74,7 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "AWS connection failed");
       setOrganizationId(String(data.organization_id));
+      setAwsAccountId(String(data.account_id));
       setConnectMessage("AWS account connected successfully.");
       setAccessKey("");
       setSecretKey("");
@@ -79,6 +83,24 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "AWS connection failed");
     } finally {
       setConnecting(false);
+    }
+  }
+
+  async function syncCloudTrail() {
+    if (!awsAccountId) return;
+    setSyncing(true);
+    setSyncMessage("");
+    setError("");
+    try {
+      const response = await fetch(API_BASE + "/api/aws/accounts/" + awsAccountId + "/cloudtrail/sync", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "CloudTrail sync failed");
+      setSyncMessage("CloudTrail sync complete. " + data.events_inserted + " new event(s) added.");
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "CloudTrail sync failed");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -110,6 +132,12 @@ export default function Home() {
             {connecting ? "Verifying AWS..." : "Connect AWS"}
           </button>
           {connectMessage && <p style={{ color: "#4ade80" }}>{connectMessage}</p>}
+          {awsAccountId && (
+            <button onClick={syncCloudTrail} disabled={syncing} style={{ marginTop: 8, marginLeft: 8, background: "#7c3aed", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: syncing ? 0.6 : 1 }}>
+              {syncing ? "Syncing CloudTrail..." : "Sync CloudTrail"}
+            </button>
+          )}
+          {syncMessage && <p style={{ color: "#a78bfa" }}>{syncMessage}</p>}
         </section>
 
         <section style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
