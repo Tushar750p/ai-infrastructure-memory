@@ -37,6 +37,8 @@ export default function Home() {
   const [organizationId, setOrganizationId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [orgName, setOrgName] = useState("");
@@ -79,6 +81,21 @@ export default function Home() {
     return fetch(input, { ...init, headers });
   }
 
+  async function loadIncidents() {
+    if (!organizationId) return;
+    setIncidentsLoading(true);
+    try {
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organizationId + "/incidents?limit=20", { cache: "no-store" });
+      if (!response.ok) throw new Error("Incident API returned " + response.status);
+      const data = await response.json();
+      setIncidents(data.incidents || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load incidents");
+    } finally {
+      setIncidentsLoading(false);
+    }
+  }
+
   async function loadEvents() {
     if (!organizationId) return;
     setLoading(true);
@@ -101,6 +118,7 @@ export default function Home() {
   useEffect(() => {
     if (organizationId) {
       loadEvents();
+      loadIncidents();
       loadGraph();
     }
   }, [organizationId]);
@@ -149,6 +167,7 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "AWS health check failed");
       setAwsHealth(data);
+      await loadIncidents();
     } catch (err) {
       setError(err instanceof Error ? err.message : "AWS health check failed");
     } finally {
@@ -479,6 +498,32 @@ export default function Home() {
           {syncMessage && <p style={{ color: "#a78bfa" }}>{syncMessage}</p>}
           {inventoryMessage && <p style={{ color: "#67e8f9" }}>{inventoryMessage}</p>}
           {incidentMessage && <p style={{ color: "#f87171" }}>{incidentMessage}</p>}
+        </section>
+
+        <section style={{ marginTop: 28, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 14, padding: 22 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0 }}>Incident Memory</h2>
+              <p style={{ color: "#64748b", marginBottom: 0 }}>AWS connection failures and infrastructure incidents remembered by AIME.</p>
+            </div>
+            <button onClick={loadIncidents} disabled={incidentsLoading || !organizationId} style={{ background: "#334155", border: 0, borderRadius: 8, padding: "9px 14px", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+              {incidentsLoading ? "Loading..." : "Refresh Incidents"}
+            </button>
+          </div>
+          {incidents.length === 0 && !incidentsLoading && <p style={{ color: "#94a3b8" }}>No incidents recorded yet.</p>}
+          {incidents.map((incident: any) => (
+            <div key={incident.id} style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "#081321", border: "1px solid #1e293b" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <strong>{incident.title}</strong>
+                <span style={{ color: incident.status === "open" ? "#fb7185" : "#4ade80", fontSize: 11, fontWeight: 700 }}>{incident.status.toUpperCase()}</span>
+              </div>
+              <div style={{ color: "#cbd5e1", fontSize: 12, marginTop: 6 }}>{incident.summary || "No summary available."}</div>
+              <div style={{ color: "#64748b", fontSize: 10, marginTop: 6 }}>
+                Severity: {incident.severity} · Started: {incident.started_at ? new Date(incident.started_at).toLocaleString() : "—"}{incident.resolved_at ? " · Resolved: " + new Date(incident.resolved_at).toLocaleString() : ""}
+              </div>
+              {incident.root_cause && <div style={{ color: "#a78bfa", fontSize: 11, marginTop: 6 }}>Root cause: {incident.root_cause}</div>}
+            </div>
+          ))}
         </section>
 
         <section style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
