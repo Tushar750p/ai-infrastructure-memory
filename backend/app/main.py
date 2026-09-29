@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.core.config import get_settings
 
@@ -43,6 +44,22 @@ allowed_origins = [origin.strip() for origin in settings.cors_allowed_origins.sp
 app = FastAPI(title="AI Infrastructure Memory", lifespan=lifespan)
 
 
+@app.get("/health/live")
+def liveness():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "database": "unavailable"})
+
+    return {"status": "ready", "database": "ok"}
+
+
 @app.middleware("http")
 async def session_origin_protection(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.cookies.get(settings.auth_cookie_name):
@@ -50,6 +67,8 @@ async def session_origin_protection(request: Request, call_next):
         if origin and origin not in allowed_origins:
             return JSONResponse(status_code=403, content={"detail": "Cross-origin session request blocked"})
     return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
