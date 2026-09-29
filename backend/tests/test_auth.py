@@ -1,5 +1,7 @@
 import pytest
 
+import app.main  # noqa: F401 - register all SQLAlchemy models before mapper configuration
+
 from app.services.auth import hash_password, normalize_email, verify_password
 
 
