@@ -15,3 +15,4 @@ class Organization(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     aws_accounts = relationship("AWSAccount", back_populates="organization", cascade="all, delete-orphan")
+    memberships = relationship("OrganizationMembership", back_populates="organization", cascade="all, delete-orphan")
