@@ -204,6 +204,28 @@ def check_aws_account_health(
     }
 
 
+@router.post("/organizations/{organization_id}/api-key/rotate", dependencies=[Depends(require_org_access)])
+def rotate_organization_api_key(
+    organization_id: int,
+    db: Session = Depends(get_db),
+):
+    organization = db.scalar(
+        select(Organization).where(Organization.id == organization_id)
+    )
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    new_api_key = secrets.token_urlsafe(32)
+    organization.api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
+    db.commit()
+
+    return {
+        "organization_id": organization.id,
+        "api_key": new_api_key,
+        "message": "API key rotated successfully. Store this key securely; it is shown only once.",
+    }
+
+
 @router.get("/organizations/{organization_id}/events", dependencies=[Depends(require_org_access)])
 def list_infrastructure_events(
     organization_id: int,
