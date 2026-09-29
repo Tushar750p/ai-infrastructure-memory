@@ -1,7 +1,8 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
@@ -38,6 +39,15 @@ settings = get_settings()
 allowed_origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
 
 app = FastAPI(title="AI Infrastructure Memory", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def session_origin_protection(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.cookies.get(settings.auth_cookie_name):
+        origin = request.headers.get("origin")
+        if origin and origin not in allowed_origins:
+            return JSONResponse(status_code=403, content={"detail": "Cross-origin session request blocked"})
+    return await call_next(request)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
