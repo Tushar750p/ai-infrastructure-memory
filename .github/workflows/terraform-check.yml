@@ -1,0 +1,25 @@
+name: Terraform Check
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/terraform/**"
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+      - name: Init
+        run: terraform init -backend=false
+      - name: Format check
+        run: terraform fmt -check -recursive
+      - name: Validate
+        run: terraform validate
