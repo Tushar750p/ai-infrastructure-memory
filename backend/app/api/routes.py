@@ -335,14 +335,22 @@ def confirm_password_reset(payload: PasswordResetRequest, db: Session = Depends(
 
 
 @router.post("/auth/login")
-def login_user(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login_user(
+    payload: LoginRequest,
+    response: Response,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     email = normalize_email(payload.email)
-    check_auth_rate_limit("login:" + email)
+    client_ip = request.client.host if request.client else "unknown"
+    check_auth_rate_limit("login:email:" + email)
+    check_auth_rate_limit("login:ip:" + client_ip)
     user = db.scalar(select(User).where(User.email == email))
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    clear_auth_rate_limit("login:" + email)
+    clear_auth_rate_limit("login:email:" + email)
+    clear_auth_rate_limit("login:ip:" + client_ip)
     token = create_session(db, user)
     settings = get_settings()
     response.set_cookie(
