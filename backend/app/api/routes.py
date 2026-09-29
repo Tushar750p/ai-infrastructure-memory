@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.database.db import get_db
 from app.models.aws_account import AWSAccount
+from app.models.infrastructure_event import InfrastructureEvent
 from app.models.organization import Organization
 from app.services.aws_credentials import build_aws_session, encrypt_secret
 from app.services.cloudtrail import collect_cloudtrail_events
@@ -70,6 +71,41 @@ def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
         "organization_id": account.organization_id,
         "region": account.region,
         "status": "connected",
+    }
+
+
+@router.get("/organizations/{organization_id}/events")
+def list_infrastructure_events(
+    organization_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    limit = max(1, min(limit, 200))
+    events = db.scalars(
+        select(InfrastructureEvent)
+        .where(InfrastructureEvent.organization_id == organization_id)
+        .order_by(InfrastructureEvent.event_time.desc())
+        .limit(limit)
+    ).all()
+    return {
+        "organization_id": organization_id,
+        "count": len(events),
+        "events": [
+            {
+                "id": event.id,
+                "aws_account_id": event.aws_account_id,
+                "event_id": event.event_id,
+                "source": event.source,
+                "event_name": event.event_name,
+                "event_time": event.event_time,
+                "region": event.region,
+                "resource_type": event.resource_type,
+                "resource_id": event.resource_id,
+                "actor": event.actor,
+                "summary": event.summary,
+            }
+            for event in events
+        ],
     }
 
 
