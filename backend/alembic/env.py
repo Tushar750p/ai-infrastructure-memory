@@ -13,6 +13,9 @@ from app.models.infrastructure_metric import InfrastructureMetric  # noqa: F401
 from app.models.incident_knowledge_edge import IncidentKnowledgeEdge  # noqa: F401
 from app.models.infrastructure_graph import InfrastructureRelationship, InfrastructureResource  # noqa: F401
 from app.models.organization import Organization  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.organization_membership import OrganizationMembership  # noqa: F401
+from app.models.user_session import UserSession  # noqa: F401
 
 config = context.config
 settings = get_settings()
