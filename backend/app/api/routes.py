@@ -33,6 +33,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.organization_membership import OrganizationMembership
 from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
 from app.services.redis_client import get_redis
+from app.services.email import send_password_reset_email
 
 _AUTH_WINDOW_SECONDS = 300
 _AUTH_MAX_ATTEMPTS = 8
@@ -299,6 +300,7 @@ def request_password_reset(payload: LoginRequest, db: Session = Depends(get_db))
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
         ))
         db.commit()
+        send_password_reset_email(user.email, raw_token)
     return {"status": "accepted", "message": "If the account exists, reset instructions will be sent."}
 
 
