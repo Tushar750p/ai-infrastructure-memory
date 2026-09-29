@@ -19,6 +19,7 @@ from app.services.correlation import correlate_resource_changes
 from app.services.incident_analysis import build_root_cause_analysis
 from app.models.infrastructure_incident import InfrastructureIncident
 from app.models.infrastructure_fix import InfrastructureFix
+from app.services.fix_memory import find_similar_fixes
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -253,6 +254,32 @@ def record_incident_fix(
         "outcome": fix.outcome,
         "verified": fix.verified,
         "created_at": fix.created_at,
+    }
+
+
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/similar-fixes")
+def similar_incident_fixes(
+    organization_id: int,
+    incident_id: int,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+):
+    incident = db.scalar(
+        select(InfrastructureIncident).where(
+            InfrastructureIncident.id == incident_id,
+            InfrastructureIncident.organization_id == organization_id,
+        )
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    fixes = find_similar_fixes(db, incident, limit=limit)
+    return {
+        "organization_id": organization_id,
+        "incident_id": incident_id,
+        "count": len(fixes),
+        "fixes": fixes,
+        "note": "Similarity is evidence-based retrieval. Commands are stored as memory and are not executed automatically.",
     }
 
 
