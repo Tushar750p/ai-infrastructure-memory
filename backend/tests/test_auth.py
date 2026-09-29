@@ -37,7 +37,10 @@ def test_normalize_email(raw: str, expected: str):
 from datetime import datetime, timedelta, timezone
 
 from app.models.email_verification_token import EmailVerificationToken
+from app.models.organization_membership import OrganizationMembership
+from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
+from app.models.user_session import UserSession
 
 
 def test_email_verification_token_model():
