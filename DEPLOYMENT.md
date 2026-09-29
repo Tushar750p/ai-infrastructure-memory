@@ -64,3 +64,64 @@ The repository also contains an AWS production stack under `infrastructure/terra
 See `infrastructure/terraform/prod/README.md` for the GitHub OIDC bootstrap, required GitHub secrets, and first deployment procedure.
 
 Production runtime secrets are injected from AWS Secrets Manager. The RDS master password is managed by Amazon RDS rather than stored in GitHub or Terraform variables.
+
+
+## Recommended low-cost public deployment
+
+For the AIME MVP/demo, AWS is optional. The application can run with:
+
+- **Supabase** for managed PostgreSQL
+- **Render** for the FastAPI backend (the repository includes `render.yaml`)
+- **Vercel** for the Next.js frontend
+- **Upstash Redis** for Redis-backed sessions, rate limiting, and cache
+
+### Supabase
+
+Create a Supabase project and copy its PostgreSQL connection string into Render as `DATABASE_URL`. Run the existing Alembic migrations from the backend against that database before using the application.
+
+### Upstash
+
+Create a Redis database and copy its TLS connection URL into Render as `REDIS_URL`. The application already uses Redis for authentication rate limiting and session/cache functionality.
+
+### Render
+
+Connect the GitHub repository to Render as a Blueprint. The repository's `render.yaml` creates the FastAPI service. Set the secret environment variables shown in that file. Generate `CREDENTIALS_ENCRYPTION_KEY` with the Fernet command above.
+
+Set `CORS_ALLOWED_ORIGINS` to the final Vercel URL. Set `PASSWORD_RESET_URL` and `EMAIL_VERIFICATION_URL` to the corresponding Vercel routes when email verification/reset emails are configured.
+
+After the backend is live, note its Render URL, for example `https://aime-api.onrender.com`.
+
+### Vercel
+
+Import the same GitHub repository into Vercel and set the **Root Directory** to `frontend`. Add:
+
+```text
+AIME_BACKEND_URL=https://YOUR-RENDER-SERVICE.onrender.com
+```
+
+The Next.js configuration proxies `/api/*` and `/health/*` through Vercel to Render. This keeps the browser-facing API on the same origin as the frontend and preserves the existing session-cookie authentication flow.
+
+The current frontend can therefore use its existing default:
+
+```text
+NEXT_PUBLIC_API_URL=
+```
+
+After Vercel gives you the final URL, update Render's `CORS_ALLOWED_ORIGINS` to that exact origin and redeploy the backend.
+
+### Database migration
+
+Run the existing Alembic migration once against Supabase:
+
+```bash
+cd backend
+DATABASE_URL='YOUR_SUPABASE_POSTGRES_URL' alembic upgrade head
+```
+
+Do not commit the connection string or any other secret.
+
+### AWS remains optional
+
+AIME's AWS connector code is still included. A customer can later connect an AWS account through the AIME UI. AWS credentials are encrypted by the application; the AIME hosting stack itself does not require an AWS account.
+
+The existing `infrastructure/terraform/prod` and AWS deployment workflow are retained as an optional enterprise deployment path. The AWS workflow is manual-only so a missing AWS OIDC secret does not break normal GitHub pushes for the Supabase/Vercel/Render deployment path.
