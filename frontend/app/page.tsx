@@ -39,6 +39,7 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [orgName, setOrgName] = useState("");
@@ -93,6 +94,30 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Unable to load incidents");
     } finally {
       setIncidentsLoading(false);
+    }
+  }
+
+  async function openIncident(incidentId: number) {
+    if (!organizationId) return;
+    setSelectedIncidentId(incidentId);
+    setIncidentTimelineLoading(true);
+    setIncidentIntelligenceLoading(true);
+    setIncidentTimeline(null);
+    setIncidentIntelligence(null);
+    try {
+      const [timelineResponse, intelligenceResponse] = await Promise.all([
+        apiFetch(API_BASE + "/api/organizations/" + organizationId + "/incidents/" + incidentId + "/timeline?lookback_minutes=120&limit=100", { cache: "no-store" }),
+        apiFetch(API_BASE + "/api/organizations/" + organizationId + "/incidents/" + incidentId + "/intelligence?lookback_minutes=120&limit=100", { cache: "no-store" }),
+      ]);
+      if (!timelineResponse.ok) throw new Error("Incident timeline API returned " + timelineResponse.status);
+      if (!intelligenceResponse.ok) throw new Error("Incident intelligence API returned " + intelligenceResponse.status);
+      setIncidentTimeline(await timelineResponse.json());
+      setIncidentIntelligence(await intelligenceResponse.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to open incident");
+    } finally {
+      setIncidentTimelineLoading(false);
+      setIncidentIntelligenceLoading(false);
     }
   }
 
@@ -522,6 +547,9 @@ export default function Home() {
                 Severity: {incident.severity} · Started: {incident.started_at ? new Date(incident.started_at).toLocaleString() : "—"}{incident.resolved_at ? " · Resolved: " + new Date(incident.resolved_at).toLocaleString() : ""}
               </div>
               {incident.root_cause && <div style={{ color: "#a78bfa", fontSize: 11, marginTop: 6 }}>Root cause: {incident.root_cause}</div>}
+              <button onClick={() => openIncident(incident.id)} style={{ marginTop: 10, background: "#1e3a5f", border: "1px solid #2563eb", borderRadius: 7, padding: "7px 11px", color: "#bfdbfe", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                {selectedIncidentId === incident.id ? "Incident Open" : "Open Timeline & Intelligence"}
+              </button>
             </div>
           ))}
         </section>
