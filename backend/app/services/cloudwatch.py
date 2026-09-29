@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.aws_account import AWSAccount
 from app.models.infrastructure_graph import InfrastructureResource
 from app.models.infrastructure_metric import InfrastructureMetric
-from app.services.aws_credentials import build_aws_session, decrypt_secret
+from app.services.aws_credentials import build_account_session
 
 
 DEFAULT_METRICS = {
@@ -23,9 +23,7 @@ def collect_cloudwatch_metrics(
     *,
     lookback_minutes: int = 15,
 ) -> int:
-    access_key_id = decrypt_secret(account.encrypted_access_key_id, encryption_key)
-    secret_access_key = decrypt_secret(account.encrypted_secret_access_key, encryption_key)
-    session = build_aws_session(access_key_id, secret_access_key, account.region)
+    session = build_account_session(account, encryption_key)
     client = session.client("cloudwatch", region_name=account.region)
 
     end = datetime.now(timezone.utc)
