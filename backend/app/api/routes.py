@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,10 +30,31 @@ from app.services.incident_intelligence import build_incident_intelligence
 from app.services.incident_knowledge import build_incident_knowledge_graph
 from app.models.user import User
 from app.models.password_reset_token import PasswordResetToken
+from app.models.auth_audit_log import AuthAuditLog
 from app.models.organization_membership import OrganizationMembership
 from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
 from app.services.redis_client import get_redis
 from app.services.email import send_password_reset_email
+
+
+def record_auth_audit(
+    db: Session,
+    action: str,
+    user_id: int | None = None,
+    organization_id: int | None = None,
+    request: Request | None = None,
+) -> None:
+    db.add(
+        AuthAuditLog(
+            user_id=user_id,
+            organization_id=organization_id,
+            action=action,
+            ip_address=request.client.host if request and request.client else None,
+            user_agent=request.headers.get("user-agent")[:2000] if request else None,
+        )
+    )
+
+
 
 _AUTH_WINDOW_SECONDS = 300
 _AUTH_MAX_ATTEMPTS = 8
@@ -298,7 +319,8 @@ class PasswordChangeRequest(BaseModel):
 def change_password(
     payload: PasswordChangeRequest,
     response: Response,
-    current_user: User = Depends(require_current_user),
+    request: Request,
+    current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     if not verify_password(payload.current_password, current_user.password_hash):
@@ -309,6 +331,7 @@ def change_password(
     current_user.password_hash = hash_password(payload.new_password)
     for session in list(current_user.sessions):
         db.delete(session)
+    record_auth_audit(db, "password_changed", user_id=current_user.id, request=request)
     db.commit()
     response.delete_cookie(
         key=get_settings().auth_cookie_name,
