@@ -66,6 +66,10 @@ resource "aws_route_table_association" "private" {
 resource "aws_security_group" "alb" {
   name = "${local.name}-alb"; vpc_id = aws_vpc.this.id
   ingress { from_port = 80; to_port = 80; protocol = "tcp"; cidr_blocks = ["0.0.0.0/0"] }
+  dynamic "ingress" {
+    for_each = var.acm_certificate_arn == "" ? [] : [1]
+    content { from_port = 443; to_port = 443; protocol = "tcp"; cidr_blocks = ["0.0.0.0/0"] }
+  }
   egress { from_port = 0; to_port = 0; protocol = "-1"; cidr_blocks = ["0.0.0.0/0"] }
 }
 resource "aws_security_group" "ecs" {
@@ -90,7 +94,8 @@ resource "aws_db_instance" "this" {
   instance_class = var.rds_instance_class
   allocated_storage = 50; max_allocated_storage = 200; storage_type = "gp3"
   storage_encrypted = true
-  db_name = var.db_name; username = var.db_username; password = var.db_password; port = 5432
+  manage_master_user_password = true
+  db_name = var.db_name; username = var.db_username; port = 5432
   db_subnet_group_name = aws_db_subnet_group.this.name
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible = false
@@ -135,6 +140,10 @@ resource "aws_iam_role_policy_attachment" "execution" {
   role = aws_iam_role.execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
+resource "aws_iam_role_policy" "execution_secrets" {
+  role = aws_iam_role.execution.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [var.app_secrets_arn, aws_db_instance.this.master_user_secret[0].secret_arn] }] })
+}
 resource "aws_iam_role" "task" {
   name = "${local.name}-ecs-task"
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{
@@ -150,6 +159,7 @@ resource "aws_iam_role_policy" "task" {
 
 resource "aws_cloudwatch_log_group" "backend" { name = "/ecs/${local.name}/backend"; retention_in_days = 30 }
 resource "aws_cloudwatch_log_group" "frontend" { name = "/ecs/${local.name}/frontend"; retention_in_days = 30 }
+resource "aws_cloudwatch_log_group" "migrate" { name = "/ecs/${local.name}/migrate"; retention_in_days = 30 }
 
 resource "aws_lb" "this" {
   name = "${local.name}-alb"; load_balancer_type = "application"; internal = false
@@ -213,41 +223,41 @@ resource "aws_ecs_task_definition" "backend" {
     name = "backend"; image = var.backend_image; essential = true
     portMappings = [{ containerPort = 8000, protocol = "tcp" }]
     environment = [
-      { name="DATABASE_URL", value="postgresql+psycopg2://${var.db_username}:${var.db_password}@${aws_db_instance.this.address}:5432/${var.db_name}" },
+      { name="DATABASE_HOST", value=aws_db_instance.this.address }, { name="DATABASE_USER", value=var.db_username },
+      { name="DATABASE_NAME", value=var.db_name }, { name="DATABASE_PORT", value="5432" },
       { name="REDIS_URL", value="rediss://${aws_elasticache_replication_group.this.primary_endpoint_address}:6379/0" },
-      { name="CREDENTIALS_ENCRYPTION_KEY", value=var.credentials_encryption_key },
       { name="AWS_SESSION_DURATION_SECONDS", value=tostring(var.aws_session_duration_seconds) },
-      { name="CORS_ALLOWED_ORIGINS", value=var.cors_allowed_origins },
-      { name="AUTH_COOKIE_SECURE", value="true" }, { name="AUTH_COOKIE_NAME", value="aime_session" },
-      { name="SMTP_HOST", value=var.smtp_host }, { name="SMTP_PORT", value=tostring(var.smtp_port) },
-      { name="SMTP_USERNAME", value=var.smtp_username }, { name="SMTP_PASSWORD", value=var.smtp_password },
-      { name="SMTP_FROM", value=var.smtp_from }, { name="SMTP_USE_TLS", value=tostring(var.smtp_use_tls) },
-      { name="PASSWORD_RESET_URL", value=var.password_reset_url }, { name="EMAIL_VERIFICATION_URL", value=var.email_verification_url }
+      { name="AUTH_COOKIE_SECURE", value="true" }, { name="AUTH_COOKIE_NAME", value="aime_session" }
+    ]
+    secrets = [
+      { name="DATABASE_PASSWORD", valueFrom="${aws_db_instance.this.master_user_secret[0].secret_arn}:password::" },
+      { name="CREDENTIALS_ENCRYPTION_KEY", valueFrom="${var.app_secrets_arn}:CREDENTIALS_ENCRYPTION_KEY::" },
+      { name="CORS_ALLOWED_ORIGINS", valueFrom="${var.app_secrets_arn}:CORS_ALLOWED_ORIGINS::" },
+      { name="SMTP_HOST", valueFrom="${var.app_secrets_arn}:SMTP_HOST::" }, { name="SMTP_PORT", valueFrom="${var.app_secrets_arn}:SMTP_PORT::" },
+      { name="SMTP_USERNAME", valueFrom="${var.app_secrets_arn}:SMTP_USERNAME::" }, { name="SMTP_PASSWORD", valueFrom="${var.app_secrets_arn}:SMTP_PASSWORD::" },
+      { name="SMTP_FROM", valueFrom="${var.app_secrets_arn}:SMTP_FROM::" }, { name="SMTP_USE_TLS", valueFrom="${var.app_secrets_arn}:SMTP_USE_TLS::" },
+      { name="PASSWORD_RESET_URL", valueFrom="${var.app_secrets_arn}:PASSWORD_RESET_URL::" }, { name="EMAIL_VERIFICATION_URL", valueFrom="${var.app_secrets_arn}:EMAIL_VERIFICATION_URL::" }
     ]
     logConfiguration = { logDriver="awslogs", options={ awslogs-group=aws_cloudwatch_log_group.backend.name, awslogs-region=var.aws_region, awslogs-stream-prefix="backend" } }
   }])
 }
 resource "aws_ecs_task_definition" "migrate" {
-  family = "${local.name}-migrate"
-  requires_compatibilities = ["FARGATE"]
-  network_mode = "awsvpc"
-  cpu = 256
-  memory = 512
-  execution_role_arn = aws_iam_role.execution.arn
-  task_role_arn = aws_iam_role.task.arn
+  family = "${local.name}-migrate"; requires_compatibilities = ["FARGATE"]; network_mode = "awsvpc"
+  cpu = 256; memory = 512; execution_role_arn = aws_iam_role.execution.arn; task_role_arn = aws_iam_role.task.arn
+  container_definitions = [{ name = "migrate" }]
   container_definitions = jsonencode([{
-    name = "migrate"
-    image = var.backend_image
-    essential = true
-    command = ["alembic", "upgrade", "head"]
+    name = "migrate"; image = var.backend_image; essential = true; command = ["alembic", "upgrade", "head"]
     environment = [
-      { name="DATABASE_URL", value="postgresql+psycopg2://${var.db_username}:${var.db_password}@${aws_db_instance.this.address}:5432/${var.db_name}" },
-      { name="CREDENTIALS_ENCRYPTION_KEY", value=var.credentials_encryption_key }
+      { name="DATABASE_HOST", value=aws_db_instance.this.address }, { name="DATABASE_USER", value=var.db_username },
+      { name="DATABASE_NAME", value=var.db_name }, { name="DATABASE_PORT", value="5432" }
     ]
-    logConfiguration = { logDriver="awslogs", options={ awslogs-group=aws_cloudwatch_log_group.backend.name, awslogs-region=var.aws_region, awslogs-stream-prefix="migrate" } }
+    secrets = [
+      { name="DATABASE_PASSWORD", valueFrom="${aws_db_instance.this.master_user_secret[0].secret_arn}:password::" },
+      { name="CREDENTIALS_ENCRYPTION_KEY", valueFrom="${var.app_secrets_arn}:CREDENTIALS_ENCRYPTION_KEY::" }
+    ]
+    logConfiguration = { logDriver="awslogs", options={ awslogs-group=aws_cloudwatch_log_group.migrate.name, awslogs-region=var.aws_region, awslogs-stream-prefix="migrate"} }
   }])
 }
-
 resource "aws_ecs_service" "frontend" {
   name = "${local.name}-frontend"; cluster = aws_ecs_cluster.this.id; task_definition = aws_ecs_task_definition.frontend.arn
   desired_count = 2; launch_type = "FARGATE"
