@@ -327,6 +327,47 @@ def list_incident_fixes(
     }
 
 
+@router.get("/organizations/{organization_id}/resources/{resource_id}/similar-fixes")
+def similar_resource_fixes(
+    organization_id: int,
+    resource_id: int,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    incident = db.scalar(
+        select(InfrastructureIncident)
+        .where(
+            InfrastructureIncident.organization_id == organization_id,
+            InfrastructureIncident.resource_id == resource_id,
+        )
+        .order_by(InfrastructureIncident.started_at.desc())
+    )
+    if not incident:
+        return {
+            "resource_id": resource_id,
+            "count": 0,
+            "fixes": [],
+            "note": "No incident history exists for this resource yet.",
+        }
+
+    fixes = find_similar_fixes(db, incident, limit=limit)
+    return {
+        "resource_id": resource_id,
+        "incident_id": incident.id,
+        "count": len(fixes),
+        "fixes": fixes,
+    }
+
+
 @router.get("/organizations/{organization_id}/resources/{resource_id}/fix-memory")
 def resource_fix_memory(
     organization_id: int,
