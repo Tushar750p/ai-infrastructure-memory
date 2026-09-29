@@ -52,6 +52,7 @@ export default function Home() {
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -215,47 +216,22 @@ export default function Home() {
         <section style={{ marginTop: 28, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 14, padding: 22 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div>
-              <h2 style={{ margin: 0 }}>Infrastructure Graph</h2>
-              <p style={{ color: "#64748b", marginBottom: 0 }}>Live AWS resource relationships discovered from your connected account.</p>
+              <h2 style={{ margin: 0 }}>Infrastructure Topology</h2>
+              <p style={{ color: "#64748b", marginBottom: 0 }}>Interactive map of the resources AIME discovered in AWS.</p>
             </div>
             <button onClick={loadGraph} disabled={graphLoading || !organizationId} style={{ background: "#334155", border: 0, borderRadius: 8, padding: "9px 14px", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
-              {graphLoading ? "Loading..." : "Refresh Graph"}
+              {graphLoading ? "Loading..." : "Refresh Topology"}
             </button>
           </div>
-          {!organizationId && <p style={{ color: "#94a3b8" }}>Connect AWS or enter an organization ID to view the graph.</p>}
-          {organizationId && graphNodes.length === 0 && !graphLoading && <p style={{ color: "#94a3b8" }}>No infrastructure resources discovered yet. Run Sync Infrastructure.</p>}
+          {!organizationId && <p style={{ color: "#94a3b8" }}>Connect AWS or enter an organization ID to view the topology.</p>}
+          {organizationId && graphNodes.length === 0 && !graphLoading && <p style={{ color: "#94a3b8" }}>No resources discovered yet. Run Sync Infrastructure.</p>}
           {graphNodes.length > 0 && (
-            <div style={{ marginTop: 18, overflowX: "auto" }}>
-              <div style={{ minWidth: 900, display: "grid", gridTemplateColumns: "repeat(4, minmax(190px, 1fr))", gap: 14 }}>
-                {["ec2.vpc", "ec2.subnet", "ec2.instance", "rds.db_instance", "elasticache.replication_group", "ec2.security_group"].map((type) => {
-                  const nodes = graphNodes.filter((node) => node.type === type);
-                  if (!nodes.length) return null;
-                  return (
-                    <div key={type} style={{ background: "#081321", border: "1px solid #26364a", borderRadius: 12, padding: 12 }}>
-                      <div style={{ color: "#38bdf8", fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>{type.toUpperCase()}</div>
-                      {nodes.map((node) => (
-                        <div key={node.id} title={node.resource_id} style={{ marginTop: 9, background: "#102033", border: "1px solid #334155", borderRadius: 8, padding: 10 }}>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{node.name || node.resource_id}</div>
-                          <div style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>{node.resource_id}</div>
-                          <div style={{ color: node.status === "running" || node.status === "available" ? "#4ade80" : "#94a3b8", fontSize: 11, marginTop: 4 }}>{node.status} · {node.region || "—"}</div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ marginTop: 16, padding: 14, background: "#081321", borderRadius: 10, border: "1px solid #1e293b" }}>
-                <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 8 }}>RELATIONSHIPS · {graphEdges.length}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {graphEdges.map((edge, index) => {
-                    const source = graphNodes.find((node) => node.id === edge.source);
-                    const target = graphNodes.find((node) => node.id === edge.target);
-                    if (!source || !target) return null;
-                    return <span key={index} style={{ background: "#102033", border: "1px solid #334155", borderRadius: 999, padding: "6px 10px", color: "#cbd5e1", fontSize: 11 }}>{source.name || source.resource_id} → {edge.type} → {target.name || target.resource_id}</span>;
-                  })}
-                </div>
-              </div>
-            </div>
+            <TopologyCanvas
+              nodes={graphNodes}
+              edges={graphEdges}
+              selectedNodeId={selectedNodeId}
+              onSelect={setSelectedNodeId}
+            />
           )}
         </section>
 
@@ -288,6 +264,86 @@ export default function Home() {
         </section>
       </div>
     </main>
+  );
+}
+
+
+function TopologyCanvas({
+  nodes,
+  edges,
+  selectedNodeId,
+  onSelect,
+}: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  selectedNodeId: number | null;
+  onSelect: (id: number | null) => void;
+}) {
+  const width = 1080;
+  const height = Math.max(430, Math.ceil(nodes.length / 4) * 150);
+  const positions = new Map<number, { x: number; y: number }>();
+  const order = ["ec2.vpc", "ec2.subnet", "ec2.instance", "rds.db_instance", "elasticache.replication_group", "ec2.security_group"];
+  const sorted = [...nodes].sort((a, b) => {
+    const ai = order.indexOf(a.type);
+    const bi = order.indexOf(b.type);
+    return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+  });
+
+  sorted.forEach((node, index) => {
+    const col = index % 4;
+    const row = Math.floor(index / 4);
+    positions.set(node.id, { x: 135 + col * 265, y: 70 + row * 145 });
+  });
+
+  const nodeColor = (type: string) => {
+    if (type.includes("vpc")) return "#2563eb";
+    if (type.includes("subnet")) return "#0891b2";
+    if (type.includes("instance")) return "#16a34a";
+    if (type.includes("rds")) return "#9333ea";
+    if (type.includes("elasticache")) return "#ea580c";
+    return "#475569";
+  };
+
+  return (
+    <div style={{ marginTop: 18, overflow: "auto", background: "#050d17", border: "1px solid #1e293b", borderRadius: 12 }}>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ minWidth: 850, display: "block" }}>
+        <defs>
+          <marker id="aime-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#64748b" />
+          </marker>
+        </defs>
+        {edges.map((edge, index) => {
+          const source = positions.get(edge.source);
+          const target = positions.get(edge.target);
+          if (!source || !target) return null;
+          const active = selectedNodeId === edge.source || selectedNodeId === edge.target;
+          return <g key={index}>
+            <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={active ? "#38bdf8" : "#334155"} strokeWidth={active ? 3 : 1.5} markerEnd="url(#aime-arrow)" />
+            <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 6} fill="#64748b" fontSize="9" textAnchor="middle">{edge.type}</text>
+          </g>;
+        })}
+        {sorted.map((node) => {
+          const pos = positions.get(node.id)!;
+          const selected = selectedNodeId === node.id;
+          return <g key={node.id} transform={`translate(${pos.x - 105},${pos.y - 35})`} onClick={() => onSelect(selected ? null : node.id)} style={{ cursor: "pointer" }}>
+            <rect width="210" height="70" rx="10" fill="#0f1d30" stroke={selected ? "#38bdf8" : nodeColor(node.type)} strokeWidth={selected ? 3 : 1.5} />
+            <circle cx="18" cy="20" r="6" fill={nodeColor(node.type)} />
+            <text x="32" y="23" fill="#e2e8f0" fontSize="11" fontWeight="700">{node.type}</text>
+            <text x="14" y="43" fill="#cbd5e1" fontSize="10">{(node.name || node.resource_id).slice(0, 30)}</text>
+            <text x="14" y="58" fill="#64748b" fontSize="9">{node.status} · {node.region || "—"}</text>
+          </g>;
+        })}
+      </svg>
+      {selectedNodeId && (() => {
+        const node = nodes.find((item) => item.id === selectedNodeId);
+        if (!node) return null;
+        const connected = edges.filter((edge) => edge.source === node.id || edge.target === node.id).length;
+        return <div style={{ padding: 14, borderTop: "1px solid #1e293b", background: "#081321" }}>
+          <strong>{node.name || node.resource_id}</strong>
+          <div style={{ color: "#64748b", fontSize: 12, marginTop: 5 }}>{node.type} · {node.resource_id} · {node.status} · {connected} relationship(s)</div>
+        </div>;
+      })()}
+    </div>
   );
 }
 
