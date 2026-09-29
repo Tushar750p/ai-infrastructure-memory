@@ -17,7 +17,11 @@ export default function DemoLanding() {
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 24px 80px" }}>
         <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: "-0.03em" }}>AIME</div>
-          <Link href="/" style={{ color: "#cbd5e1", textDecoration: "none", fontSize: 14 }}>Open Console →</Link>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <Link href="/reports" style={{ color: "#cbd5e1", textDecoration: "none", fontSize: 14 }}>SRE Reports</Link>
+            <Link href="/time-machine" style={{ color: "#cbd5e1", textDecoration: "none", fontSize: 14 }}>Time Machine</Link>
+            <Link href="/" style={{ color: "#cbd5e1", textDecoration: "none", fontSize: 14 }}>Open Console →</Link>
+          </div>
         </nav>
 
         <section style={{ padding: "100px 0 72px", maxWidth: 900 }}>
@@ -36,6 +40,9 @@ export default function DemoLanding() {
             </Link>
             <Link href="/" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>
               Try AIME Console
+            </Link>
+            <Link href="/time-machine" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>
+              Explore Time Machine
             </Link>
             <a href="#capabilities" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>
               Explore capabilities
