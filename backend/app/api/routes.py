@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,8 +28,94 @@ from app.services.anomaly_detection import detect_metric_anomalies
 from app.services.incident_timeline import build_incident_timeline
 from app.services.incident_intelligence import build_incident_intelligence
 from app.services.incident_knowledge import build_incident_knowledge_graph
+from app.models.user import User
+from app.models.organization_membership import OrganizationMembership
+from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    password: str = Field(min_length=12, max_length=256)
+    full_name: str | None = Field(default=None, max_length=200)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    password: str = Field(min_length=1, max_length=256)
+
+
+def require_user(
+    aime_session: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    user = get_user_from_session(db, aime_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+
+@router.post("/auth/register")
+def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
+    email = normalize_email(payload.email)
+    if db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(status_code=409, detail="Email is already registered")
+
+    user = User(email=email, password_hash=hash_password(payload.password), full_name=payload.full_name)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"user_id": user.id, "email": user.email, "full_name": user.full_name}
+
+
+@router.post("/auth/login")
+def login_user(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    email = normalize_email(payload.email)
+    user = db.scalar(select(User).where(User.email == email))
+    if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_session(db, user)
+    settings = get_settings()
+    response.set_cookie(
+        key=settings.auth_cookie_name,
+        value=token,
+        max_age=7 * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return {"user_id": user.id, "email": user.email, "full_name": user.full_name}
+
+
+@router.post("/auth/logout")
+def logout_user(
+    response: Response,
+    aime_session: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
+    delete_session(db, aime_session)
+    response.delete_cookie(get_settings().auth_cookie_name, path="/")
+    return {"status": "logged_out"}
+
+
+@router.get("/auth/me")
+def current_user(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    memberships = db.scalars(
+        select(OrganizationMembership).where(OrganizationMembership.user_id == user.id)
+    ).all()
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "organizations": [
+            {"organization_id": m.organization_id, "role": m.role}
+            for m in memberships
+        ],
+    }
+
 
 def require_org_access(
     organization_id: int,
