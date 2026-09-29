@@ -20,6 +20,7 @@ from app.services.incident_analysis import build_root_cause_analysis
 from app.models.infrastructure_incident import InfrastructureIncident
 from app.models.infrastructure_fix import InfrastructureFix
 from app.services.fix_memory import find_similar_fixes
+from app.services.anomaly_detection import detect_metric_anomalies
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -533,6 +534,44 @@ def resource_correlation(
         lookback_minutes=lookback_minutes,
         limit=limit,
     )
+
+
+@router.get("/organizations/{organization_id}/resources/{resource_id}/anomalies")
+def resource_metric_anomalies(
+    organization_id: int,
+    resource_id: int,
+    lookback_minutes: int = 60,
+    baseline_minutes: int = 360,
+    z_threshold: float = 2.5,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    anomalies = detect_metric_anomalies(
+        db,
+        organization_id=organization_id,
+        resource_id=resource_id,
+        lookback_minutes=lookback_minutes,
+        baseline_minutes=baseline_minutes,
+        z_threshold=max(1.0, min(z_threshold, 10.0)),
+        limit=limit,
+    )
+    return {
+        "resource_id": resource_id,
+        "lookback_minutes": lookback_minutes,
+        "baseline_minutes": baseline_minutes,
+        "z_threshold": z_threshold,
+        "count": len(anomalies),
+        "anomalies": anomalies,
+    }
 
 
 @router.get("/organizations/{organization_id}/resources/{resource_id}/metrics")
