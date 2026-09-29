@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.database.db import SessionLocal
 from app.models.aws_account import AWSAccount
+from app.models.infrastructure_incident import InfrastructureIncident
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.aws_health import update_account_health
 from app.services.aws_health_incident import record_health_incident
@@ -32,11 +33,11 @@ def sync_all_accounts() -> int:
                 health = update_account_health(account, settings.credentials_encryption_key, settings.aws_session_duration_seconds)
                 record_health_incident(db, account, error=account.last_health_error)
                 if health == "healthy":
-                    open_incident = db.scalar(select(__import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident).where(
-                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.organization_id == account.organization_id,
-                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.aws_account_id == account.id,
-                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.status == "open",
-                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.title == "AWS connection unhealthy",
+                    open_incident = db.scalar(select(InfrastructureIncident).where(
+                        InfrastructureIncident.organization_id == account.organization_id,
+                        InfrastructureIncident.aws_account_id == account.id,
+                        InfrastructureIncident.status == "open",
+                        InfrastructureIncident.title == "AWS connection unhealthy",
                     ))
                     if open_incident:
                         open_incident.status = "resolved"
