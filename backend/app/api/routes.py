@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -14,6 +13,7 @@ from app.models.infrastructure_event import InfrastructureEvent
 from app.models.infrastructure_graph import InfrastructureRelationship, InfrastructureResource
 from app.models.organization import Organization
 from app.services.aws_credentials import build_aws_session, encrypt_secret
+from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
@@ -143,6 +143,35 @@ def infrastructure_graph(organization_id: int, db: Session = Depends(get_db)):
             }
             for relationship in relationships
         ],
+    }
+
+
+@router.post("/aws/accounts/{account_id}/inventory/sync")
+def sync_inventory(account_id: int, db: Session = Depends(get_db)):
+    account = db.scalar(
+        select(AWSAccount).where(
+            AWSAccount.id == account_id,
+            AWSAccount.enabled.is_(True),
+        )
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="AWS account not found")
+
+    try:
+        discovered = sync_aws_inventory(
+            db,
+            account,
+            get_settings().credentials_encryption_key,
+        )
+    except (BotoCoreError, ClientError) as exc:
+        raise HTTPException(status_code=502, detail="AWS inventory synchronization failed") from exc
+
+    return {
+        "account_id": account.id,
+        "organization_id": account.organization_id,
+        "source": "aws.inventory",
+        "resources_discovered": discovered,
+        "message": "AWS infrastructure inventory synchronized",
     }
 
 
