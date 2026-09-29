@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -750,7 +751,7 @@ export default function Home() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#07111f", color: "#e2e8f0", padding: "40px", fontFamily: "Arial, sans-serif" }}>
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px 0", display: "flex", justifyContent: "flex-end" }}><Link href="/demo" style={{ color: "#7dd3fc", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← AIME Product Overview</Link></div><main style={{ minHeight: "100vh", background: "#07111f", color: "#e2e8f0", padding: "40px", fontFamily: "Arial, sans-serif" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}><div style={{ marginBottom: 20, padding: 18, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
