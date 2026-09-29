@@ -1,7 +1,3 @@
-from datetime import datetime, timezone
-
-from app.models.infrastructure_incident import InfrastructureIncident
-
 
 def build_incident_intelligence(timeline: dict) -> dict:
     items = timeline.get("timeline", [])
