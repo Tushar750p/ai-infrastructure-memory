@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.database.db import SessionLocal
 from app.models.aws_account import AWSAccount
 from app.services.aws_inventory import sync_aws_inventory
+from app.services.aws_health import update_account_health
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.incident_detection import detect_incidents_for_account
 from app.services.cloudwatch import collect_cloudwatch_metrics
@@ -26,6 +27,14 @@ def sync_all_accounts() -> int:
             select(AWSAccount).where(AWSAccount.enabled.is_(True))
         ).all()
         for account in accounts:
+            try:
+                health = update_account_health(account, settings.credentials_encryption_key, settings.aws_session_duration_seconds)
+                db.commit()
+                logger.info("AIME AWS health for account %s: %s", account.id, health)
+            except Exception:
+                db.rollback()
+                logger.exception("AWS health check failed for account %s", account.id)
+
             try:
                 total += collect_cloudtrail_events(
                     db,
