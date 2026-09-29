@@ -100,7 +100,7 @@ def sync_aws_inventory(db: Session, account: AWSAccount, encryption_key: str) ->
                     account,
                     "ec2.subnet",
                     subnet_id,
-                    name=item.get("Tags", [{}])[0].get("Value") if item.get("Tags") else None,
+                    name=next((tag.get("Value") for tag in item.get("Tags", []) if tag.get("Key") == "Name"), None),
                     region=item.get("AvailabilityZone", account.region)[:-1],
                 )
                 subnets[subnet_id] = subnet
