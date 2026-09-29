@@ -38,6 +38,9 @@ export default function Home() {
   const [apiKey, setApiKey] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState("");
   const [authUser, setAuthUser] = useState<any>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [linkOrgId, setLinkOrgId] = useState("");
@@ -160,6 +163,32 @@ export default function Home() {
     });
     setAuthUser(null);
     setAuthMessage("Signed out.");
+  }
+
+  async function changePassword() {
+    if (!currentPassword || newPassword.length < 12) {
+      setPasswordChangeMessage("Current password required; new password must be at least 12 characters.");
+      return;
+    }
+    setAuthLoading(true);
+    setPasswordChangeMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/auth/password-change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Password change failed");
+      setCurrentPassword("");
+      setNewPassword("");
+      setAuthUser(null);
+      setPasswordChangeMessage("Password changed. Please sign in again.");
+    } catch (err) {
+      setPasswordChangeMessage(err instanceof Error ? err.message : "Password change failed");
+    } finally {
+      setAuthLoading(false);
+    }
   }
 
   async function requestPasswordReset() {
@@ -756,6 +785,17 @@ export default function Home() {
               </div>
             )}
           </div>
+          {authUser && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #1e293b" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Change password</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" type="password" style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+                <input value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password (12+ chars)" type="password" style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+                <button onClick={changePassword} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Change password</button>
+              </div>
+              {passwordChangeMessage && <div style={{ marginTop: 8, color: "#94a3b8", fontSize: 13 }}>{passwordChangeMessage}</div>}
+            </div>
+          )}
           {authMessage && <div style={{ marginTop: 10, color: "#94a3b8", fontSize: 13 }}>{authMessage}</div>}
         </div>
         
