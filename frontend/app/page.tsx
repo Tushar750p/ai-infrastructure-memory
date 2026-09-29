@@ -36,6 +36,11 @@ type EventItem = {
 export default function Home() {
   const [organizationId, setOrganizationId] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authUser, setAuthUser] = useState<any>(null);
+  const [authMessage, setAuthMessage] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
@@ -79,7 +84,67 @@ export default function Home() {
   async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
     const headers = new Headers(init.headers);
     if (apiKey) headers.set("X-AIME-API-Key", apiKey);
-    return fetch(input, { ...init, headers });
+    return fetch(input, { ...init, headers, credentials: "include" });
+  }
+
+  async function loadCurrentUser() {
+    try {
+      const response = await apiFetch(API_BASE + "/api/auth/me", { cache: "no-store" });
+      if (response.ok) setAuthUser(await response.json());
+    } catch {
+      // Session may not exist; API-key authentication remains supported.
+    }
+  }
+
+  async function login() {
+    setAuthLoading(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(API_BASE + "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Login failed");
+      setAuthUser(data);
+      setAuthPassword("");
+      setAuthMessage("Signed in successfully.");
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function logout() {
+    await fetch(API_BASE + "/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    setAuthUser(null);
+    setAuthMessage("Signed out.");
+  }
+
+  async function register() {
+    setAuthLoading(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(API_BASE + "/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Registration failed");
+      setAuthMessage("Account created. Sign in to continue.");
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setAuthLoading(false);
+    }
   }
 
   async function loadIncidents() {
@@ -498,7 +563,28 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#07111f", color: "#e2e8f0", padding: "40px", fontFamily: "Arial, sans-serif" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}><div style={{ marginBottom: 20, padding: 18, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>AIME Authentication</div>
+              <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
+                {authUser ? "Signed in as " + authUser.email : "Use secure session authentication or the existing API key flow."}
+              </div>
+            </div>
+            {authUser ? (
+              <button onClick={logout} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Sign out</button>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="Email" type="email" style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+                <input value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="Password (12+ chars)" type="password" style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+                <button onClick={login} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: 0, background: "#2563eb", color: "white" }}>Sign in</button>
+                <button onClick={register} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Create account</button>
+              </div>
+            )}
+          </div>
+          {authMessage && <div style={{ marginTop: 10, color: "#94a3b8", fontSize: 13 }}>{authMessage}</div>}
+        </div>
+        
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
           <div>
             <p style={{ color: "#38bdf8", fontSize: 13, letterSpacing: 2, fontWeight: 700 }}>AIME CONSOLE</p>
