@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database_url: str = Field(default="postgresql+psycopg2://postgres:postgres@localhost:5432/infra_memory")
     credentials_encryption_key: str
     aws_session_duration_seconds: int = 900
+    cors_allowed_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
