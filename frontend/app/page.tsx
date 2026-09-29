@@ -59,6 +59,8 @@ export default function Home() {
   const [rcaLoading, setRcaLoading] = useState(false);
   const [fixMemory, setFixMemory] = useState<any>(null);
   const [fixMemoryLoading, setFixMemoryLoading] = useState(false);
+  const [similarFixes, setSimilarFixes] = useState<any>(null);
+  const [similarFixesLoading, setSimilarFixesLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -170,6 +172,24 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Unable to load fix memory");
     } finally {
       setFixMemoryLoading(false);
+    }
+  }
+
+
+  async function loadSimilarFixes(incidentId: number) {
+    if (!organizationId) return;
+    setSimilarFixesLoading(true);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/incidents/" + incidentId + "/similar-fixes?limit=5",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Similar fixes API returned " + response.status);
+      setSimilarFixes(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load similar fixes");
+    } finally {
+      setSimilarFixesLoading(false);
     }
   }
 
@@ -303,6 +323,23 @@ export default function Home() {
           {correlationLoading && <p style={{ marginTop: 14, color: "#38bdf8" }}>Analyzing recent infrastructure changes...</p>}
 
 
+
+          {similarFixesLoading && <p style={{ marginTop: 12, color: "#fbbf24" }}>Finding similar verified fixes...</p>}
+          {similarFixes?.fixes?.length > 0 && (
+            <div style={{ marginTop: 12, background: "#111827", border: "1px solid #334155", borderRadius: 10, padding: 16 }}>
+              <strong>Recommended From SRE Memory</strong>
+              {similarFixes.fixes.map((fix: any) => (
+                <div key={fix.fix_id} style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "#172033" }}>
+                  <strong>{fix.title}</strong>
+                  <div style={{ color: "#cbd5e1", fontSize: 12, marginTop: 4 }}>{fix.resolution}</div>
+                  <div style={{ color: "#fbbf24", fontSize: 10, marginTop: 4 }}>
+                    Match {Math.round(fix.similarity_score * 100)}% · {fix.matched_resource_type || "related resource"}
+                  </div>
+                </div>
+              ))}
+              <div style={{ color: "#64748b", fontSize: 10, marginTop: 8 }}>Stored commands are recommendations only; AIME never executes them automatically.</div>
+            </div>
+          )}
           {fixMemoryLoading && <p style={{ marginTop: 12, color: "#4ade80" }}>Searching previous fixes...</p>}
           {fixMemory && (
             <div style={{ marginTop: 12, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
