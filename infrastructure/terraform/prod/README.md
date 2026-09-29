@@ -80,7 +80,22 @@ Add these GitHub Actions secrets:
 
 The RDS master password is generated and managed by Amazon RDS; it is no longer a GitHub secret.
 
-## 5. Generate the application encryption key
+## 5. Verify the OIDC role before deployment
+
+After creating the role, verify that the role trust policy contains all of the following:
+
+- OIDC provider: `token.actions.githubusercontent.com`
+- Audience: `sts.amazonaws.com`
+- Subject: `repo:Tushar750p/ai-infrastructure-memory:ref:refs/heads/main`
+- GitHub Actions permission: `id-token: write` (already present in the workflow)
+
+The GitHub secret `AWS_DEPLOY_ROLE_ARN` must contain the full ARN of that exact role, for example:
+
+`arn:aws:iam::AWS_ACCOUNT_ID:role/aime-github-deploy`
+
+Do not put an AWS access key or secret key into the repository secrets for this workflow.
+
+## 6. Generate the application encryption key
 
 Run locally:
 
@@ -90,7 +105,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Put the generated value into `CREDENTIALS_ENCRYPTION_KEY`.
 
-## 6. Trigger deployment
+## 7. Trigger deployment
 
 Open GitHub Actions → **Production Deploy** → **Run workflow**.
 
