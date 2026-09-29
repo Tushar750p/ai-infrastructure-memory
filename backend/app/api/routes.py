@@ -16,6 +16,7 @@ import hashlib
 import secrets
 from app.services.aws_credentials import build_aws_session, encrypt_secret, build_role_session, build_account_session
 from app.services.aws_health import update_account_health
+from app.services.aws_health_incident import record_health_incident
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.correlation import correlate_resource_changes
@@ -180,6 +181,18 @@ def check_aws_account_health(
         settings.credentials_encryption_key,
         settings.aws_session_duration_seconds,
     )
+    record_health_incident(db, account, error=account.last_health_error)
+    if status == "healthy":
+        open_incident = db.scalar(select(InfrastructureIncident).where(
+            InfrastructureIncident.organization_id == organization_id,
+            InfrastructureIncident.aws_account_id == account.id,
+            InfrastructureIncident.status == "open",
+            InfrastructureIncident.title == "AWS connection unhealthy",
+        ))
+        if open_incident:
+            open_incident.status = "resolved"
+            open_incident.resolved_at = account.last_health_check_at
+            open_incident.root_cause = "AWS connection health check recovered."
     db.commit()
 
     return {
