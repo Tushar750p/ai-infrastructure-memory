@@ -4,6 +4,21 @@ import { useEffect, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+type GraphNode = {
+  id: number;
+  type: string;
+  resource_id: string;
+  name?: string;
+  region?: string;
+  status: string;
+};
+
+type GraphEdge = {
+  source: number;
+  target: number;
+  type: string;
+};
+
 type EventItem = {
   id: number;
   aws_account_id: number;
@@ -34,6 +49,9 @@ export default function Home() {
   const [syncMessage, setSyncMessage] = useState("");
   const [inventorySyncing, setInventorySyncing] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState("");
+  const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
+  const [graphLoading, setGraphLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -55,7 +73,10 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (organizationId) loadEvents();
+    if (organizationId) {
+      loadEvents();
+      loadGraph();
+    }
   }, [organizationId]);
 
   async function connectAwsAccount() {
@@ -107,6 +128,23 @@ export default function Home() {
   }
 
 
+
+  async function loadGraph() {
+    if (!organizationId) return;
+    setGraphLoading(true);
+    try {
+      const response = await fetch(API_BASE + "/api/organizations/" + organizationId + "/graph", { cache: "no-store" });
+      if (!response.ok) throw new Error("Graph API returned " + response.status);
+      const data = await response.json();
+      setGraphNodes(data.nodes || []);
+      setGraphEdges(data.edges || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load infrastructure graph");
+    } finally {
+      setGraphLoading(false);
+    }
+  }
+
   async function syncInventory() {
     if (!awsAccountId) return;
     setInventorySyncing(true);
@@ -117,6 +155,7 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Inventory sync failed");
       setInventoryMessage("AWS inventory sync complete. " + data.resources_discovered + " resource(s) scanned.");
+      await loadGraph();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Inventory sync failed");
     } finally {
@@ -170,6 +209,54 @@ export default function Home() {
           <Metric title="Events in Memory" value={events.length.toString()} />
           <Metric title="Latest Source" value={events[0]?.source || "—"} />
           <Metric title="Latest Region" value={events[0]?.region || "—"} />
+        </section>
+
+
+        <section style={{ marginTop: 28, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 14, padding: 22 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0 }}>Infrastructure Graph</h2>
+              <p style={{ color: "#64748b", marginBottom: 0 }}>Live AWS resource relationships discovered from your connected account.</p>
+            </div>
+            <button onClick={loadGraph} disabled={graphLoading || !organizationId} style={{ background: "#334155", border: 0, borderRadius: 8, padding: "9px 14px", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+              {graphLoading ? "Loading..." : "Refresh Graph"}
+            </button>
+          </div>
+          {!organizationId && <p style={{ color: "#94a3b8" }}>Connect AWS or enter an organization ID to view the graph.</p>}
+          {organizationId && graphNodes.length === 0 && !graphLoading && <p style={{ color: "#94a3b8" }}>No infrastructure resources discovered yet. Run Sync Infrastructure.</p>}
+          {graphNodes.length > 0 && (
+            <div style={{ marginTop: 18, overflowX: "auto" }}>
+              <div style={{ minWidth: 900, display: "grid", gridTemplateColumns: "repeat(4, minmax(190px, 1fr))", gap: 14 }}>
+                {["ec2.vpc", "ec2.subnet", "ec2.instance", "rds.db_instance", "elasticache.replication_group", "ec2.security_group"].map((type) => {
+                  const nodes = graphNodes.filter((node) => node.type === type);
+                  if (!nodes.length) return null;
+                  return (
+                    <div key={type} style={{ background: "#081321", border: "1px solid #26364a", borderRadius: 12, padding: 12 }}>
+                      <div style={{ color: "#38bdf8", fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>{type.toUpperCase()}</div>
+                      {nodes.map((node) => (
+                        <div key={node.id} title={node.resource_id} style={{ marginTop: 9, background: "#102033", border: "1px solid #334155", borderRadius: 8, padding: 10 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{node.name || node.resource_id}</div>
+                          <div style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>{node.resource_id}</div>
+                          <div style={{ color: node.status === "running" || node.status === "available" ? "#4ade80" : "#94a3b8", fontSize: 11, marginTop: 4 }}>{node.status} · {node.region || "—"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 16, padding: 14, background: "#081321", borderRadius: 10, border: "1px solid #1e293b" }}>
+                <div style={{ color: "#94a3b8", fontSize: 12, marginBottom: 8 }}>RELATIONSHIPS · {graphEdges.length}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {graphEdges.map((edge, index) => {
+                    const source = graphNodes.find((node) => node.id === edge.source);
+                    const target = graphNodes.find((node) => node.id === edge.target);
+                    if (!source || !target) return null;
+                    return <span key={index} style={{ background: "#102033", border: "1px solid #334155", borderRadius: 999, padding: "6px 10px", color: "#cbd5e1", fontSize: 11 }}>{source.name || source.resource_id} → {edge.type} → {target.name || target.resource_id}</span>;
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <section style={{ marginTop: 28, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 14, overflow: "hidden" }}>
