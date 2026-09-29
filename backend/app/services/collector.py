@@ -10,6 +10,7 @@ from app.models.aws_account import AWSAccount
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.incident_detection import detect_incidents_for_account
+from app.services.cloudwatch import collect_cloudwatch_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,22 @@ def sync_all_accounts() -> int:
                 )
             except Exception:
                 logger.exception("CloudTrail collection failed for account %s", account.id)
+
+            try:
+                metrics = collect_cloudwatch_metrics(
+                    db,
+                    account,
+                    settings.credentials_encryption_key,
+                    lookback_minutes=15,
+                )
+                if metrics:
+                    logger.info(
+                        "AIME stored %s CloudWatch datapoints for account %s",
+                        metrics,
+                        account.id,
+                    )
+            except Exception:
+                logger.exception("CloudWatch collection failed for account %s", account.id)
 
             try:
                 detected = detect_incidents_for_account(
