@@ -143,8 +143,10 @@ export default function Home() {
   useEffect(() => {
     const savedOrganizationId = window.localStorage.getItem("aime.organizationId");
     const savedApiKey = window.localStorage.getItem("aime.apiKey");
+    const savedAwsAccountId = window.localStorage.getItem("aime.awsAccountId");
     if (savedOrganizationId) setOrganizationId(savedOrganizationId);
     if (savedApiKey) setApiKey(savedApiKey);
+    if (savedAwsAccountId) setAwsAccountId(savedAwsAccountId);
   }, []);
 
   useEffect(() => {
@@ -181,6 +183,7 @@ export default function Home() {
       setOrganizationId(String(data.organization_id));
       window.localStorage.setItem("aime.organizationId", String(data.organization_id));
       setAwsAccountId(String(data.account_id));
+      window.localStorage.setItem("aime.awsAccountId", String(data.account_id));
       setConnectMessage("AWS account connected successfully.");
       setAccessKey("");
       setSecretKey("");
