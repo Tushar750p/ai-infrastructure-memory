@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     credentials_encryption_key: str
     aws_session_duration_seconds: int = 900
     cors_allowed_origins: str = "http://localhost:3000"
+    auth_cookie_secure: bool = False
+    auth_cookie_name: str = "aime_session"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
