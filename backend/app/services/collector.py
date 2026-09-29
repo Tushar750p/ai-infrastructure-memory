@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.database.db import SessionLocal
 from app.models.aws_account import AWSAccount
+from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,21 @@ def sync_all_accounts() -> int:
                 )
             except Exception:
                 logger.exception("CloudTrail collection failed for account %s", account.id)
+
+            try:
+                discovered = sync_aws_inventory(
+                    db,
+                    account,
+                    settings.credentials_encryption_key,
+                )
+                if discovered:
+                    logger.info(
+                        "AIME inventory discovered %s resources for account %s",
+                        discovered,
+                        account.id,
+                    )
+            except Exception:
+                logger.exception("AWS inventory collection failed for account %s", account.id)
         return total
     finally:
         db.close()
