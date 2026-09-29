@@ -535,6 +535,57 @@ def resource_correlation(
     )
 
 
+@router.get("/organizations/{organization_id}/resources/{resource_id}/metrics")
+def resource_metrics(
+    organization_id: int,
+    resource_id: int,
+    lookback_minutes: int = 60,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    from app.models.infrastructure_metric import InfrastructureMetric
+
+    since = datetime.now(timezone.utc) - timedelta(minutes=max(1, min(lookback_minutes, 1440)))
+    metrics = db.scalars(
+        select(InfrastructureMetric)
+        .where(
+            InfrastructureMetric.organization_id == organization_id,
+            InfrastructureMetric.resource_id == resource_id,
+            InfrastructureMetric.timestamp >= since,
+        )
+        .order_by(InfrastructureMetric.timestamp.desc())
+        .limit(max(1, min(limit, 500)))
+    ).all()
+
+    return {
+        "resource_id": resource_id,
+        "lookback_minutes": lookback_minutes,
+        "count": len(metrics),
+        "metrics": [
+            {
+                "id": metric.id,
+                "namespace": metric.namespace,
+                "metric_name": metric.metric_name,
+                "dimensions": metric.dimensions,
+                "timestamp": metric.timestamp,
+                "value": metric.value,
+                "unit": metric.unit,
+                "statistic": metric.statistic,
+            }
+            for metric in metrics
+        ],
+    }
+
+
 @router.post("/aws/accounts/{account_id}/inventory/sync")
 def sync_inventory(account_id: int, db: Session = Depends(get_db)):
     account = db.scalar(
