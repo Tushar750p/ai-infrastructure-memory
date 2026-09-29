@@ -18,6 +18,7 @@ from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.correlation import correlate_resource_changes
 from app.services.incident_analysis import build_root_cause_analysis
 from app.models.infrastructure_incident import InfrastructureIncident
+from app.models.infrastructure_fix import InfrastructureFix
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -191,6 +192,163 @@ def create_incident(
         "severity": incident.severity,
         "status": incident.status,
         "started_at": incident.started_at,
+    }
+
+
+class FixCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    resolution: str = Field(min_length=1)
+    commands: list[str] | None = None
+    steps: list[str] | None = None
+    outcome: str | None = None
+    verified: bool = False
+    created_by: str | None = None
+
+
+@router.post("/organizations/{organization_id}/incidents/{incident_id}/fixes")
+def record_incident_fix(
+    organization_id: int,
+    incident_id: int,
+    payload: FixCreate,
+    db: Session = Depends(get_db),
+):
+    incident = db.scalar(
+        select(InfrastructureIncident).where(
+            InfrastructureIncident.id == incident_id,
+            InfrastructureIncident.organization_id == organization_id,
+        )
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    fix = InfrastructureFix(
+        organization_id=organization_id,
+        incident_id=incident.id,
+        resource_id=incident.resource_id,
+        title=payload.title,
+        resolution=payload.resolution,
+        commands=payload.commands,
+        steps=payload.steps,
+        outcome=payload.outcome,
+        verified=payload.verified,
+        created_by=payload.created_by,
+    )
+    db.add(fix)
+
+    if payload.verified:
+        incident.status = "resolved"
+        incident.resolved_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(fix)
+
+    return {
+        "id": fix.id,
+        "incident_id": fix.incident_id,
+        "resource_id": fix.resource_id,
+        "title": fix.title,
+        "resolution": fix.resolution,
+        "commands": fix.commands,
+        "steps": fix.steps,
+        "outcome": fix.outcome,
+        "verified": fix.verified,
+        "created_at": fix.created_at,
+    }
+
+
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/fixes")
+def list_incident_fixes(
+    organization_id: int,
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.scalar(
+        select(InfrastructureIncident).where(
+            InfrastructureIncident.id == incident_id,
+            InfrastructureIncident.organization_id == organization_id,
+        )
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    fixes = db.scalars(
+        select(InfrastructureFix)
+        .where(
+            InfrastructureFix.organization_id == organization_id,
+            InfrastructureFix.incident_id == incident_id,
+        )
+        .order_by(InfrastructureFix.created_at.desc())
+    ).all()
+
+    return {
+        "incident_id": incident_id,
+        "count": len(fixes),
+        "fixes": [
+            {
+                "id": fix.id,
+                "title": fix.title,
+                "resolution": fix.resolution,
+                "commands": fix.commands,
+                "steps": fix.steps,
+                "outcome": fix.outcome,
+                "verified": fix.verified,
+                "created_by": fix.created_by,
+                "created_at": fix.created_at,
+            }
+            for fix in fixes
+        ],
+    }
+
+
+@router.get("/organizations/{organization_id}/resources/{resource_id}/fix-memory")
+def resource_fix_memory(
+    organization_id: int,
+    resource_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    fixes = db.scalars(
+        select(InfrastructureFix)
+        .where(
+            InfrastructureFix.organization_id == organization_id,
+            InfrastructureFix.resource_id == resource_id,
+        )
+        .order_by(InfrastructureFix.created_at.desc())
+        .limit(max(1, min(limit, 100)))
+    ).all()
+
+    return {
+        "resource": {
+            "id": resource.id,
+            "type": resource.resource_type,
+            "resource_id": resource.resource_id,
+            "name": resource.name,
+        },
+        "count": len(fixes),
+        "fixes": [
+            {
+                "id": fix.id,
+                "incident_id": fix.incident_id,
+                "title": fix.title,
+                "resolution": fix.resolution,
+                "commands": fix.commands,
+                "steps": fix.steps,
+                "outcome": fix.outcome,
+                "verified": fix.verified,
+                "created_by": fix.created_by,
+                "created_at": fix.created_at,
+            }
+            for fix in fixes
+        ],
     }
 
 
