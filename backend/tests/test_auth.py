@@ -32,3 +32,21 @@ def test_password_hashes_are_unique():
 )
 def test_normalize_email(raw: str, expected: str):
     assert normalize_email(raw) == expected
+
+
+from datetime import datetime, timedelta, timezone
+
+from app.models.email_verification_token import EmailVerificationToken
+from app.models.user import User
+
+
+def test_email_verification_token_model():
+    user = User(email="test@example.com", password_hash=hash_password("a" * 12))
+    token = EmailVerificationToken(
+        user=user,
+        token_hash="a" * 64,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    )
+    assert token.user is user
+    assert token.used_at is None
+    assert len(token.token_hash) == 64
