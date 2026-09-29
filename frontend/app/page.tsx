@@ -53,6 +53,8 @@ export default function Home() {
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const [correlation, setCorrelation] = useState<any>(null);
+  const [correlationLoading, setCorrelationLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -146,6 +148,26 @@ export default function Home() {
     }
   }
 
+
+  async function loadCorrelation(resourceId: number) {
+    if (!organizationId) return;
+    setSelectedNodeId(resourceId);
+    setCorrelationLoading(true);
+    setCorrelation(null);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/correlation?lookback_minutes=60&limit=25",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Correlation API returned " + response.status);
+      setCorrelation(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to analyze resource changes");
+    } finally {
+      setCorrelationLoading(false);
+    }
+  }
+
   async function syncInventory() {
     if (!awsAccountId) return;
     setInventorySyncing(true);
@@ -230,8 +252,23 @@ export default function Home() {
               nodes={graphNodes}
               edges={graphEdges}
               selectedNodeId={selectedNodeId}
-              onSelect={setSelectedNodeId}
+              onSelect={loadCorrelation}
             />
+          )}
+
+          {correlationLoading && <p style={{ marginTop: 14, color: "#38bdf8" }}>Analyzing recent infrastructure changes...</p>}
+          {correlation && (
+            <div style={{ marginTop: 14, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
+              <strong>Change Correlation</strong>
+              <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 5 }}>{correlation.analysis}</div>
+              {correlation.correlated_changes?.map((change: EventItem) => (
+                <div key={change.id} style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "#102033" }}>
+                  <strong>{change.event_name}</strong>
+                  <span style={{ color: "#64748b", marginLeft: 10, fontSize: 11 }}>{new Date(change.event_time).toLocaleString()}</span>
+                  <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>{change.summary || change.resource_id || "Infrastructure change"}</div>
+                </div>
+              ))}
+            </div>
           )}
         </section>
 
@@ -325,7 +362,7 @@ function TopologyCanvas({
         {sorted.map((node) => {
           const pos = positions.get(node.id)!;
           const selected = selectedNodeId === node.id;
-          return <g key={node.id} transform={`translate(${pos.x - 105},${pos.y - 35})`} onClick={() => onSelect(selected ? null : node.id)} style={{ cursor: "pointer" }}>
+          return <g key={node.id} transform={`translate(${pos.x - 105},${pos.y - 35})`} onClick={() => onSelect(node.id)} style={{ cursor: "pointer" }}>
             <rect width="210" height="70" rx="10" fill="#0f1d30" stroke={selected ? "#38bdf8" : nodeColor(node.type)} strokeWidth={selected ? 3 : 1.5} />
             <circle cx="18" cy="20" r="6" fill={nodeColor(node.type)} />
             <text x="32" y="23" fill="#e2e8f0" fontSize="11" fontWeight="700">{node.type}</text>
