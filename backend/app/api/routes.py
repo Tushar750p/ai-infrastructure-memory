@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import time
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
@@ -31,6 +32,24 @@ from app.services.incident_knowledge import build_incident_knowledge_graph
 from app.models.user import User
 from app.models.organization_membership import OrganizationMembership
 from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
+
+_AUTH_ATTEMPTS: dict[str, tuple[int, float]] = {}
+_AUTH_WINDOW_SECONDS = 300
+_AUTH_MAX_ATTEMPTS = 8
+
+
+def check_auth_rate_limit(identifier: str) -> None:
+    now = time.time()
+    count, window_start = _AUTH_ATTEMPTS.get(identifier, (0, now))
+    if now - window_start >= _AUTH_WINDOW_SECONDS:
+        count, window_start = 0, now
+    if count >= _AUTH_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many authentication attempts. Try again later.")
+    _AUTH_ATTEMPTS[identifier] = (count + 1, window_start)
+
+
+def clear_auth_rate_limit(identifier: str) -> None:
+    _AUTH_ATTEMPTS.pop(identifier, None)
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -257,10 +276,12 @@ def create_organization(
 @router.post("/auth/login")
 def login_user(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
+    check_auth_rate_limit("login:" + email)
     user = db.scalar(select(User).where(User.email == email))
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    clear_auth_rate_limit("login:" + email)
     token = create_session(db, user)
     settings = get_settings()
     response.set_cookie(
