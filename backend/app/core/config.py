@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     smtp_from: str = "AIME <no-reply@example.com>"
     smtp_use_tls: bool = True
     password_reset_url: str | None = None
+    email_verification_url: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
