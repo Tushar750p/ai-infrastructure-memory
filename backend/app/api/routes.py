@@ -52,6 +52,28 @@ def require_org_access(
 
 
 
+def require_aws_account_access(
+    account_id: int,
+    x_aime_api_key: str | None = Header(default=None, alias="X-AIME-API-Key"),
+    db: Session = Depends(get_db),
+) -> AWSAccount:
+    if not x_aime_api_key:
+        raise HTTPException(status_code=401, detail="AIME API key required")
+
+    key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
+    account = db.scalar(
+        select(AWSAccount)
+        .join(Organization, AWSAccount.organization_id == Organization.id)
+        .where(
+            AWSAccount.id == account_id,
+            Organization.api_key_hash == key_hash,
+        )
+    )
+    if not account:
+        raise HTTPException(status_code=403, detail="AWS account access denied")
+    return account
+
+
 class AWSAccountCreate(BaseModel):
     api_key: str | None = Field(default=None, min_length=16, max_length=256)
     organization_name: str = Field(min_length=1, max_length=200)
@@ -890,7 +912,7 @@ def resource_metrics(
     }
 
 
-@router.post("/aws/accounts/{account_id}/inventory/sync")
+@router.post("/aws/accounts/{account_id}/inventory/sync", dependencies=[Depends(require_aws_account_access)])
 def sync_inventory(account_id: int, db: Session = Depends(get_db)):
     account = db.scalar(
         select(AWSAccount).where(
@@ -919,7 +941,7 @@ def sync_inventory(account_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/aws/accounts/{account_id}/cloudtrail/sync")
+@router.post("/aws/accounts/{account_id}/cloudtrail/sync", dependencies=[Depends(require_aws_account_access)])
 def sync_cloudtrail(account_id: int, db: Session = Depends(get_db)):
     account = db.scalar(select(AWSAccount).where(AWSAccount.id == account_id, AWSAccount.enabled.is_(True)))
     if not account:
