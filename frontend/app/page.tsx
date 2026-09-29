@@ -141,9 +141,9 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const savedOrganizationId = window.localStorage.getItem("aime.organizationId");
-    const savedApiKey = window.localStorage.getItem("aime.apiKey");
-    const savedAwsAccountId = window.localStorage.getItem("aime.awsAccountId");
+    const savedOrganizationId = window.sessionStorage.getItem("aime.organizationId");
+    const savedApiKey = window.sessionStorage.getItem("aime.apiKey");
+    const savedAwsAccountId = window.sessionStorage.getItem("aime.awsAccountId");
     if (savedOrganizationId) setOrganizationId(savedOrganizationId);
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedAwsAccountId) setAwsAccountId(savedAwsAccountId);
@@ -178,12 +178,12 @@ export default function Home() {
       if (data.api_key) {
         const nextApiKey = String(data.api_key);
         setApiKey(nextApiKey);
-        window.localStorage.setItem("aime.apiKey", nextApiKey);
+        window.sessionStorage.setItem("aime.apiKey", nextApiKey);
       }
       setOrganizationId(String(data.organization_id));
-      window.localStorage.setItem("aime.organizationId", String(data.organization_id));
+      window.sessionStorage.setItem("aime.organizationId", String(data.organization_id));
       setAwsAccountId(String(data.account_id));
-      window.localStorage.setItem("aime.awsAccountId", String(data.account_id));
+      window.sessionStorage.setItem("aime.awsAccountId", String(data.account_id));
       setConnectMessage("AWS account connected successfully.");
       setAccessKey("");
       setSecretKey("");
@@ -205,7 +205,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.detail || "API key rotation failed");
       const nextApiKey = String(data.api_key);
       setApiKey(nextApiKey);
-      window.localStorage.setItem("aime.apiKey", nextApiKey);
+      window.sessionStorage.setItem("aime.apiKey", nextApiKey);
       setConnectMessage("API key rotated successfully. Store the new key securely.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "API key rotation failed");
