@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -83,6 +83,22 @@ class AWSAccountCreate(BaseModel):
     role_arn: str | None = Field(default=None, max_length=2048)
     external_id: str | None = Field(default=None, max_length=256)
     region: str = Field(default="us-east-1", min_length=1, max_length=32)
+
+    @field_validator("organization_name", "region")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("value must not be blank")
+        return value
+
+    @field_validator("role_arn", "external_id", "access_key_id", "secret_access_key", "api_key")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 
 @router.post("/aws/accounts")
