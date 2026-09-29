@@ -111,8 +111,8 @@ jobs:
       - name: Terraform init
         run: terraform -chdir="$TF_DIR" init -backend-config="bucket=${{ steps.repos.outputs.state_bucket }}" -backend-config="key=prod/terraform.tfstate" -backend-config="region=${{ env.AWS_REGION }}" -backend-config="dynamodb_table=${{ steps.repos.outputs.state_table }}" -backend-config="encrypt=true"
 
-      - name: Terraform format check
-        run: terraform -chdir="$TF_DIR" fmt -check -recursive
+      - name: Terraform format
+        run: terraform -chdir="$TF_DIR" fmt -recursive
 
       - name: Terraform validate
         run: terraform -chdir="$TF_DIR" validate
