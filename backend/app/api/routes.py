@@ -286,8 +286,12 @@ def create_organization(
     }
 
 
+class PasswordResetEmailRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+
+
 @router.post("/auth/password-reset/request")
-def request_password_reset(payload: LoginRequest, db: Session = Depends(get_db)):
+def request_password_reset(payload: PasswordResetEmailRequest, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
     check_auth_rate_limit("reset:" + email)
     user = db.scalar(select(User).where(User.email == email))
