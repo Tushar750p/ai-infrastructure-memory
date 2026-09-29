@@ -23,6 +23,7 @@ from app.services.fix_memory import find_similar_fixes
 from app.services.anomaly_detection import detect_metric_anomalies
 from app.services.incident_timeline import build_incident_timeline
 from app.services.incident_intelligence import build_incident_intelligence
+from app.services.incident_knowledge import build_incident_knowledge_graph
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -258,6 +259,29 @@ def record_incident_fix(
         "verified": fix.verified,
         "created_at": fix.created_at,
     }
+
+
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/knowledge-graph")
+def incident_knowledge_graph(
+    organization_id: int,
+    incident_id: int,
+    lookback_minutes: int = 120,
+    db: Session = Depends(get_db),
+):
+    incident = db.scalar(
+        select(InfrastructureIncident).where(
+            InfrastructureIncident.id == incident_id,
+            InfrastructureIncident.organization_id == organization_id,
+        )
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    return build_incident_knowledge_graph(
+        db,
+        incident,
+        lookback_minutes=lookback_minutes,
+    )
 
 
 @router.get("/organizations/{organization_id}/incidents/{incident_id}/intelligence")
