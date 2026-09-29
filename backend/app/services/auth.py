@@ -68,6 +68,18 @@ def get_user_from_session(db: Session, raw_token: str | None) -> User | None:
     return session.user
 
 
+def cleanup_expired_sessions(db: Session) -> int:
+    now = datetime.now(timezone.utc)
+    sessions = db.scalars(
+        select(UserSession).where(UserSession.expires_at <= now)
+    ).all()
+    for session in sessions:
+        db.delete(session)
+    if sessions:
+        db.commit()
+    return len(sessions)
+
+
 def delete_session(db: Session, raw_token: str | None) -> None:
     if not raw_token:
         return
