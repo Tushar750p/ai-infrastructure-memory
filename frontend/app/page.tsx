@@ -161,11 +161,31 @@ export default function Home() {
 
 
 
+
+  async function loadResourceTimeline(resourceId: number) {
+    if (!organizationId) return;
+    setIncidentTimelineLoading(true);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/timeline?lookback_minutes=120&limit=100",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Resource timeline API returned " + response.status);
+      setIncidentTimeline(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load incident timeline");
+    } finally {
+      setIncidentTimelineLoading(false);
+    }
+  }
+
   async function loadFixMemory(resourceId: number) {
     if (!organizationId) return;
     setFixMemoryLoading(true);
     setFixMemory(null);
     setSimilarFixes(null);
+    setIncidentTimeline(null);
+    loadResourceTimeline(resourceId);
     loadSimilarFixesForResource(resourceId);
     try {
       const response = await fetch(
