@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.infrastructure_event import InfrastructureEvent
 from app.models.infrastructure_graph import InfrastructureResource
 from app.models.infrastructure_incident import InfrastructureIncident
+from app.models.infrastructure_metric import InfrastructureMetric
 
 HIGH_SIGNAL_PREFIXES = (
     "Modify", "Update", "Delete", "Stop", "Terminate", "Reboot",
@@ -59,6 +60,27 @@ def detect_incidents_for_account(
         if existing:
             continue
 
+        metric_evidence = []
+        if resource:
+            metrics = db.scalars(
+                select(InfrastructureMetric)
+                .where(
+                    InfrastructureMetric.organization_id == organization_id,
+                    InfrastructureMetric.resource_id == resource.id,
+                    InfrastructureMetric.timestamp >= since,
+                )
+                .order_by(InfrastructureMetric.timestamp.desc())
+                .limit(20)
+            ).all()
+            for metric in metrics:
+                metric_evidence.append({
+                    "metric_name": metric.metric_name,
+                    "timestamp": metric.timestamp.isoformat(),
+                    "value": metric.value,
+                    "unit": metric.unit,
+                    "statistic": metric.statistic,
+                })
+
         incident = InfrastructureIncident(
             organization_id=organization_id,
             aws_account_id=aws_account_id,
@@ -72,12 +94,16 @@ def detect_incidents_for_account(
                 f"{event.resource_id or 'unknown resource'}."
             ),
             evidence=[{
+                "type": "change",
                 "event_id": event.id,
                 "event_name": event.event_name,
                 "event_time": event.event_time.isoformat(),
                 "resource_id": event.resource_id,
                 "actor": event.actor,
                 "summary": event.summary,
+            }, {
+                "type": "telemetry",
+                "metrics": metric_evidence,
             }],
         )
         db.add(incident)
