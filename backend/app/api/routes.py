@@ -289,6 +289,36 @@ def create_organization(
     }
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+
+
+@router.post("/auth/password-change")
+def change_password(
+    payload: PasswordChangeRequest,
+    response: Response,
+    current_user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="New password must differ from current password")
+
+    current_user.password_hash = hash_password(payload.new_password)
+    for session in list(current_user.sessions):
+        db.delete(session)
+    db.commit()
+    response.delete_cookie(
+        key=get_settings().auth_cookie_name,
+        httponly=True,
+        secure=get_settings().auth_cookie_secure,
+        samesite="lax",
+    )
+    return {"status": "password_changed"}
+
+
 class PasswordResetEmailRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
 
