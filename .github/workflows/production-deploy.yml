@@ -94,7 +94,6 @@ jobs:
 
       - name: Terraform apply
         env:
-          TF_VAR_credentials_encryption_key: ${{ secrets.CREDENTIALS_ENCRYPTION_KEY }}
           TF_VAR_backend_image: ${{ steps.repos.outputs.backend }}:${GITHUB_SHA}
           TF_VAR_frontend_image: ${{ steps.repos.outputs.frontend }}:${GITHUB_SHA}
           TF_VAR_app_secrets_arn: ${{ steps.app_secret.outputs.arn }}
