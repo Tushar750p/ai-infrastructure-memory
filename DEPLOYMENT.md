@@ -55,3 +55,12 @@ Do not expose PostgreSQL or Redis directly to the internet.
 Run database migrations once per release before rolling out new backend replicas. PostgreSQL should use managed backups in a real production environment. Redis can be replaced by a managed Redis-compatible service by changing `REDIS_URL`.
 
 The current FastAPI process also starts the CloudTrail collector worker. If the backend is scaled horizontally, move collection into a dedicated worker service or enforce a distributed single-worker lease to avoid duplicate collection.
+
+
+## AWS ECS/Fargate production
+
+The repository also contains an AWS production stack under `infrastructure/terraform/prod`.
+
+See `infrastructure/terraform/prod/README.md` for the GitHub OIDC bootstrap, required GitHub secrets, and first deployment procedure.
+
+Production runtime secrets are injected from AWS Secrets Manager. The RDS master password is managed by Amazon RDS rather than stored in GitHub or Terraform variables.
