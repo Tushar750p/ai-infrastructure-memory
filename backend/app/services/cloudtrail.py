@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.aws_account import AWSAccount
 from app.models.infrastructure_event import InfrastructureEvent
+from app.models.infrastructure_graph import InfrastructureResource
 from app.services.aws_credentials import build_aws_session, decrypt_secret
 
 
@@ -51,6 +52,32 @@ def _normalize(event: dict, account: AWSAccount) -> InfrastructureEvent:
     )
 
 
+def _upsert_resource(db: Session, account: AWSAccount, resource_type: str | None, resource_id: str | None, region: str | None) -> None:
+    if not resource_type or not resource_id:
+        return
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.aws_account_id == account.id,
+            InfrastructureResource.resource_type == resource_type,
+            InfrastructureResource.resource_id == resource_id,
+        )
+    )
+    if resource:
+        resource.region = region or resource.region
+        resource.status = "active"
+        return
+    db.add(
+        InfrastructureResource(
+            organization_id=account.organization_id,
+            aws_account_id=account.id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            region=region or account.region,
+            status="active",
+        )
+    )
+
+
 def collect_cloudtrail_events(
     db: Session,
     account: AWSAccount,
@@ -85,6 +112,14 @@ def collect_cloudtrail_events(
                 if exists:
                     continue
                 db.add(_normalize(event, account))
+                resource_type, resource_id = _resource_details(event)
+                _upsert_resource(
+                    db,
+                    account,
+                    resource_type,
+                    resource_id,
+                    event.get("AwsRegion") or account.region,
+                )
                 inserted += 1
         db.commit()
     except (BotoCoreError, ClientError):
