@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${backendUrl.replace(/\\/$/, "")}/api/:path*`,
+        destination: `${backendUrl.replace(/\/$/, "")}/api/:path*`,
       },
       {
         source: "/health/:path*",
