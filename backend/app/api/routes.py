@@ -372,7 +372,7 @@ class PasswordResetRequest(BaseModel):
 
 
 @router.post("/auth/password-reset/confirm")
-def confirm_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+def confirm_password_reset(payload: PasswordResetRequest, request: Request, db: Session = Depends(get_db)):
     token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
     reset = db.scalar(
         select(PasswordResetToken)
@@ -386,6 +386,7 @@ def confirm_password_reset(payload: PasswordResetRequest, db: Session = Depends(
 
     reset.user.password_hash = hash_password(payload.new_password)
     reset.used_at = datetime.now(timezone.utc)
+    record_auth_audit(db, "password_reset", user_id=reset.user.id, request=request)
     for session in list(reset.user.sessions):
         db.delete(session)
     db.commit()
@@ -405,11 +406,15 @@ def login_user(
     check_auth_rate_limit("login:ip:" + client_ip)
     user = db.scalar(select(User).where(User.email == email))
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
+        record_auth_audit(db, "login_failed", request=request)
+        db.commit()
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     clear_auth_rate_limit("login:email:" + email)
     clear_auth_rate_limit("login:ip:" + client_ip)
     token = create_session(db, user)
+    record_auth_audit(db, "login_success", user_id=user.id, request=request)
+    db.commit()
     settings = get_settings()
     response.set_cookie(
         key=settings.auth_cookie_name,
@@ -426,9 +431,14 @@ def login_user(
 @router.post("/auth/logout")
 def logout_user(
     response: Response,
+    request: Request,
     aime_session: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ):
+    user = get_user_from_session(db, aime_session)
+    if user:
+        record_auth_audit(db, "logout", user_id=user.id, request=request)
+        db.commit()
     delete_session(db, aime_session)
     response.delete_cookie(get_settings().auth_cookie_name, path="/")
     return {"status": "logged_out"}
@@ -723,6 +733,8 @@ def check_aws_account_health(
 @router.post("/organizations/{organization_id}/api-key/rotate", dependencies=[Depends(require_org_write)])
 def rotate_organization_api_key(
     organization_id: int,
+    request: Request,
+    user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     organization = db.scalar(
@@ -733,6 +745,13 @@ def rotate_organization_api_key(
 
     new_api_key = secrets.token_urlsafe(32)
     organization.api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
+    record_auth_audit(
+        db,
+        "api_key_rotated",
+        user_id=user.id,
+        organization_id=organization.id,
+        request=request,
+    )
     db.commit()
 
     return {
