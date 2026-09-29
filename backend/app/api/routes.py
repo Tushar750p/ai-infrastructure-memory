@@ -14,7 +14,7 @@ from app.models.infrastructure_graph import InfrastructureRelationship, Infrastr
 from app.models.organization import Organization
 import hashlib
 import secrets
-from app.services.aws_credentials import build_aws_session, encrypt_secret, build_role_session
+from app.services.aws_credentials import build_aws_session, encrypt_secret, build_role_session, build_account_session
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.correlation import correlate_resource_changes
@@ -128,6 +128,77 @@ def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
         "region": account.region,
         "status": "connected",
         **({"api_key": generated_api_key} if generated_api_key else {}),
+    }
+
+
+@router.get("/organizations/{organization_id}/aws/accounts")
+def list_aws_accounts(
+    organization_id: int,
+    db: Session = Depends(get_db),
+):
+    accounts = db.scalars(
+        select(AWSAccount).where(AWSAccount.organization_id == organization_id).order_by(AWSAccount.id)
+    ).all()
+    return {
+        "organization_id": organization_id,
+        "accounts": [
+            {
+                "id": account.id,
+                "account_id": account.account_id,
+                "region": account.region,
+                "credential_mode": account.credential_mode,
+                "role_arn": account.role_arn,
+                "enabled": account.enabled,
+                "last_health_check_at": account.last_health_check_at,
+                "last_health_status": account.last_health_status,
+                "last_health_error": account.last_health_error,
+            }
+            for account in accounts
+        ],
+    }
+
+
+@router.post("/organizations/{organization_id}/aws/accounts/{account_id}/health")
+def check_aws_account_health(
+    organization_id: int,
+    account_id: int,
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    account = db.scalar(
+        select(AWSAccount).where(
+            AWSAccount.id == account_id,
+            AWSAccount.organization_id == organization_id,
+        )
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="AWS account not found")
+
+    checked_at = datetime.now(timezone.utc)
+    try:
+        session = build_account_session(account, settings.credentials_encryption_key)
+        identity = session.client("sts", region_name=account.region).get_caller_identity()
+        if identity.get("Account") != account.account_id:
+            raise ValueError("AWS account identity does not match the connected account")
+        account.last_health_status = "healthy"
+        account.last_health_error = None
+        status = "healthy"
+        error = None
+    except Exception as exc:
+        account.last_health_status = "unhealthy"
+        account.last_health_error = str(exc)[:1000]
+        status = "unhealthy"
+        error = account.last_health_error
+
+    account.last_health_check_at = checked_at
+    db.commit()
+
+    return {
+        "account_id": account.id,
+        "aws_account_id": account.account_id,
+        "status": status,
+        "checked_at": checked_at,
+        "error": error,
     }
 
 
