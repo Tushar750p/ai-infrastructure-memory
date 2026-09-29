@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-import time
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
@@ -32,24 +31,36 @@ from app.services.incident_knowledge import build_incident_knowledge_graph
 from app.models.user import User
 from app.models.organization_membership import OrganizationMembership
 from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
+from app.services.redis_client import get_redis
 
-_AUTH_ATTEMPTS: dict[str, tuple[int, float]] = {}
 _AUTH_WINDOW_SECONDS = 300
 _AUTH_MAX_ATTEMPTS = 8
 
 
 def check_auth_rate_limit(identifier: str) -> None:
-    now = time.time()
-    count, window_start = _AUTH_ATTEMPTS.get(identifier, (0, now))
-    if now - window_start >= _AUTH_WINDOW_SECONDS:
-        count, window_start = 0, now
-    if count >= _AUTH_MAX_ATTEMPTS:
-        raise HTTPException(status_code=429, detail="Too many authentication attempts. Try again later.")
-    _AUTH_ATTEMPTS[identifier] = (count + 1, window_start)
+    try:
+        client = get_redis()
+        key = "aime:auth:attempts:" + hashlib.sha256(identifier.encode()).hexdigest()
+        count = client.incr(key)
+        if count == 1:
+            client.expire(key, _AUTH_WINDOW_SECONDS)
+        if count > _AUTH_MAX_ATTEMPTS:
+            raise HTTPException(status_code=429, detail="Too many authentication attempts. Try again later.")
+    except HTTPException:
+        raise
+    except Exception:
+        # Auth must remain available if Redis is temporarily unavailable.
+        return
 
 
 def clear_auth_rate_limit(identifier: str) -> None:
-    _AUTH_ATTEMPTS.pop(identifier, None)
+    try:
+        client = get_redis()
+        key = "aime:auth:attempts:" + hashlib.sha256(identifier.encode()).hexdigest()
+        client.delete(key)
+    except Exception:
+        return
+
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
