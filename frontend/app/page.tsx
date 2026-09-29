@@ -43,6 +43,11 @@ export default function Home() {
   const [linkOrgId, setLinkOrgId] = useState("");
   const [linkApiKey, setLinkApiKey] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState("viewer");
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [memberMessage, setMemberMessage] = useState("");
   const [events, setEvents] = useState<EventItem[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
@@ -173,6 +178,64 @@ export default function Home() {
     }
   }
 
+  async function loadMembers() {
+    if (!organizationId || !authUser) return;
+    setMembersLoading(true);
+    setMemberMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/auth/organizations/" + organizationId + "/members", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Unable to load members");
+      setMembers(data.members || []);
+    } catch (err) {
+      setMemberMessage(err instanceof Error ? err.message : "Unable to load members");
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  async function addMember() {
+    if (!organizationId || !memberEmail) return;
+    setMembersLoading(true);
+    setMemberMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/auth/organizations/" + organizationId + "/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: memberEmail, role: memberRole }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Unable to add member");
+      setMemberEmail("");
+      setMemberMessage("Member added.");
+      await loadMembers();
+    } catch (err) {
+      setMemberMessage(err instanceof Error ? err.message : "Unable to add member");
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  async function updateMemberRole(userId: number, role: string) {
+    if (!organizationId) return;
+    setMembersLoading(true);
+    try {
+      const response = await apiFetch(API_BASE + "/api/auth/organizations/" + organizationId + "/members/" + userId, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Unable to update role");
+      setMemberMessage("Role updated.");
+      await loadMembers();
+    } catch (err) {
+      setMemberMessage(err instanceof Error ? err.message : "Unable to update role");
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
   async function loadIncidents() {
     if (!organizationId) return;
     setIncidentsLoading(true);
@@ -244,7 +307,7 @@ export default function Home() {
     if (organizationId) {
       loadEvents();
       loadIncidents();
-      loadGraph();
+      loadGraph();\n      loadMembers();
     }
   }, [organizationId]);
 
@@ -592,7 +655,41 @@ export default function Home() {
       <div style={{ maxWidth: 1200, margin: "0 auto" }}><div style={{ marginBottom: 20, padding: 18, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>AIME Authentication</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>AIME Authentication</div><div style={{ marginBottom: 20, padding: 18, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>Organization Members</div>
+              <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>Manage authenticated access for this organization.</div>
+            </div>
+            <button onClick={loadMembers} disabled={!authUser || membersLoading} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Refresh</button>
+          </div>
+          {authUser && (
+            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+              <input value={memberEmail} onChange={e => setMemberEmail(e.target.value)} placeholder="User email" type="email" style={{ padding: 9, flex: 1, minWidth: 220, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+              <select value={memberRole} onChange={e => setMemberRole(e.target.value)} style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }}>
+                <option value="viewer">Viewer</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button onClick={addMember} disabled={membersLoading || !memberEmail} style={{ padding: "9px 14px", borderRadius: 8, border: 0, background: "#2563eb", color: "white" }}>Add member</button>
+            </div>
+          )}
+          <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
+            {members.map(member => (
+              <div key={member.user_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: 10, border: "1px solid #1e293b", borderRadius: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{member.full_name || member.email}</div>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>{member.email}</div>
+                </div>
+                <select value={member.role} disabled={member.role === "owner" || membersLoading} onChange={e => updateMemberRole(member.user_id, e.target.value)} style={{ padding: 7, borderRadius: 7, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }}>
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+              </div>
+            ))}
+          </div>
+          {memberMessage && <div style={{ marginTop: 10, color: "#94a3b8", fontSize: 13 }}>{memberMessage}</div>}
+        </div>
               <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
                 {authUser ? "Signed in as " + authUser.email : "Use secure session authentication or the existing API key flow."}
               </div>
