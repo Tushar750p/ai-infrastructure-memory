@@ -120,44 +120,70 @@ def current_user(user: User = Depends(require_user), db: Session = Depends(get_d
 def require_org_access(
     organization_id: int,
     x_aime_api_key: str | None = Header(default=None, alias="X-AIME-API-Key"),
+    aime_session: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> Organization:
-    if not x_aime_api_key:
-        raise HTTPException(status_code=401, detail="AIME API key required")
-
-    key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
-    organization = db.scalar(
-        select(Organization).where(
-            Organization.id == organization_id,
-            Organization.api_key_hash == key_hash,
+    if x_aime_api_key:
+        key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
+        organization = db.scalar(
+            select(Organization).where(
+                Organization.id == organization_id,
+                Organization.api_key_hash == key_hash,
+            )
         )
-    )
-    if not organization:
-        raise HTTPException(status_code=403, detail="Organization access denied")
-    return organization
+        if organization:
+            return organization
+
+    user = get_user_from_session(db, aime_session)
+    if user:
+        membership = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == user.id,
+            )
+        )
+        if membership and membership.role in {"owner", "admin", "viewer"}:
+            organization = db.get(Organization, organization_id)
+            if organization:
+                return organization
+
+    raise HTTPException(status_code=401 if not x_aime_api_key and not aime_session else 403, detail="Organization access denied")
 
 
 
 def require_aws_account_access(
     account_id: int,
     x_aime_api_key: str | None = Header(default=None, alias="X-AIME-API-Key"),
+    aime_session: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> AWSAccount:
-    if not x_aime_api_key:
-        raise HTTPException(status_code=401, detail="AIME API key required")
-
-    key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
-    account = db.scalar(
-        select(AWSAccount)
-        .join(Organization, AWSAccount.organization_id == Organization.id)
-        .where(
-            AWSAccount.id == account_id,
-            Organization.api_key_hash == key_hash,
+    if x_aime_api_key:
+        key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
+        account = db.scalar(
+            select(AWSAccount)
+            .join(Organization, AWSAccount.organization_id == Organization.id)
+            .where(
+                AWSAccount.id == account_id,
+                Organization.api_key_hash == key_hash,
+            )
         )
-    )
-    if not account:
-        raise HTTPException(status_code=403, detail="AWS account access denied")
-    return account
+        if account:
+            return account
+
+    user = get_user_from_session(db, aime_session)
+    if user:
+        account = db.scalar(
+            select(AWSAccount)
+            .join(OrganizationMembership, AWSAccount.organization_id == OrganizationMembership.organization_id)
+            .where(
+                AWSAccount.id == account_id,
+                OrganizationMembership.user_id == user.id,
+            )
+        )
+        if account:
+            return account
+
+    raise HTTPException(status_code=401 if not x_aime_api_key and not aime_session else 403, detail="AWS account access denied")
 
 
 class AWSAccountCreate(BaseModel):
