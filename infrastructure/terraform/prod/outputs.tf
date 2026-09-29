@@ -8,3 +8,6 @@ output "private_subnet_ids" { value=aws_subnet.private[*].id }
 output "ecs_security_group_id" { value=aws_security_group.ecs.id }
 output "migration_task_definition" { value=aws_ecs_task_definition.migrate.arn }
 output "rds_master_user_secret_arn" { value=aws_db_instance.this.master_user_secret[0].secret_arn }
+
+output "ecs_frontend_service_name" { value=aws_ecs_service.frontend.name }
+output "ecs_backend_service_name" { value=aws_ecs_service.backend.name }
