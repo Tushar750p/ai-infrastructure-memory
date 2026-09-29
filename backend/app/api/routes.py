@@ -223,6 +223,39 @@ def require_org_access(
 
 
 
+def require_org_write(
+    organization_id: int,
+    x_aime_api_key: str | None = Header(default=None, alias="X-AIME-API-Key"),
+    aime_session: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> Organization:
+    if x_aime_api_key:
+        key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
+        organization = db.scalar(
+            select(Organization).where(
+                Organization.id == organization_id,
+                Organization.api_key_hash == key_hash,
+            )
+        )
+        if organization:
+            return organization
+
+    user = get_user_from_session(db, aime_session)
+    if user:
+        membership = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == user.id,
+            )
+        )
+        if membership and membership.role in {"owner", "admin"}:
+            organization = db.get(Organization, organization_id)
+            if organization:
+                return organization
+
+    raise HTTPException(status_code=401 if not x_aime_api_key and not aime_session else 403, detail="Organization write access denied")
+
+
 def require_aws_account_access(
     account_id: int,
     x_aime_api_key: str | None = Header(default=None, alias="X-AIME-API-Key"),
@@ -426,7 +459,7 @@ def check_aws_account_health(
     }
 
 
-@router.post("/organizations/{organization_id}/api-key/rotate", dependencies=[Depends(require_org_access)])
+@router.post("/organizations/{organization_id}/api-key/rotate", dependencies=[Depends(require_org_write)])
 def rotate_organization_api_key(
     organization_id: int,
     db: Session = Depends(get_db),
@@ -526,7 +559,7 @@ class IncidentCreate(BaseModel):
     summary: str | None = None
 
 
-@router.post("/organizations/{organization_id}/incidents", dependencies=[Depends(require_org_access)])
+@router.post("/organizations/{organization_id}/incidents", dependencies=[Depends(require_org_write)])
 def create_incident(
     organization_id: int,
     payload: IncidentCreate,
@@ -574,7 +607,7 @@ class FixCreate(BaseModel):
     created_by: str | None = None
 
 
-@router.post("/organizations/{organization_id}/incidents/{incident_id}/fixes", dependencies=[Depends(require_org_access)])
+@router.post("/organizations/{organization_id}/incidents/{incident_id}/fixes", dependencies=[Depends(require_org_write)])
 def record_incident_fix(
     organization_id: int,
     incident_id: int,
@@ -908,7 +941,7 @@ def resource_fix_memory(
     }
 
 
-@router.post("/organizations/{organization_id}/incidents/detect", dependencies=[Depends(require_org_access)])
+@router.post("/organizations/{organization_id}/incidents/detect", dependencies=[Depends(require_org_write)])
 def detect_incidents(
     organization_id: int,
     lookback_minutes: int = 15,
