@@ -244,7 +244,6 @@ resource "aws_ecs_task_definition" "backend" {
 resource "aws_ecs_task_definition" "migrate" {
   family = "${local.name}-migrate"; requires_compatibilities = ["FARGATE"]; network_mode = "awsvpc"
   cpu = 256; memory = 512; execution_role_arn = aws_iam_role.execution.arn; task_role_arn = aws_iam_role.task.arn
-  container_definitions = [{ name = "migrate" }]
   container_definitions = jsonencode([{
     name = "migrate"; image = var.backend_image; essential = true; command = ["alembic", "upgrade", "head"]
     environment = [
