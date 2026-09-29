@@ -9,14 +9,6 @@ variable "redis_node_type" { type=string default="cache.t4g.micro" }
 variable "db_name" { type=string default="infra_memory" }
 variable "db_username" { type=string default="aime" }
 variable "aws_session_duration_seconds" { type=number default=900 }
-variable "cors_allowed_origins" { type=string }
-variable "smtp_host" { type=string default="" }
-variable "smtp_port" { type=number default=587 }
-variable "smtp_username" { type=string default="" }
-variable "smtp_from" { type=string default="AIME <no-reply@example.com>" }
-variable "smtp_use_tls" { type=bool default=true }
-variable "password_reset_url" { type=string }
-variable "email_verification_url" { type=string }
 variable "backend_image" { type=string }
 variable "frontend_image" { type=string }
 variable "acm_certificate_arn" { type=string default="" }
