@@ -40,6 +40,8 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState("");
   const [authUser, setAuthUser] = useState<any>(null);
   const [authMessage, setAuthMessage] = useState("");
+  const [linkOrgId, setLinkOrgId] = useState("");
+  const [linkApiKey, setLinkApiKey] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -113,6 +115,30 @@ export default function Home() {
       setAuthMessage("Signed in successfully.");
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function linkOrganization() {
+    setAuthLoading(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(API_BASE + "/api/auth/organizations/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ organization_id: Number(linkOrgId), api_key: linkApiKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Organization linking failed");
+      setOrganizationId(linkOrgId);
+      window.sessionStorage.setItem("aime.organizationId", linkOrgId);
+      setLinkApiKey("");
+      setAuthMessage("Existing organization linked successfully.");
+      await loadCurrentUser();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : "Organization linking failed");
     } finally {
       setAuthLoading(false);
     }
@@ -572,7 +598,12 @@ export default function Home() {
               </div>
             </div>
             {authUser ? (
-              <button onClick={logout} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Sign out</button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input value={linkOrgId} onChange={e => setLinkOrgId(e.target.value)} placeholder="Existing Org ID" type="number" style={{ padding: 9, width: 130, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+                <input value={linkApiKey} onChange={e => setLinkApiKey(e.target.value)} placeholder="Existing API key" type="password" style={{ padding: 9, width: 180, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
+                <button onClick={linkOrganization} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Link organization</button>
+                <button onClick={logout} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Sign out</button>
+              </div>
             ) : (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="Email" type="email" style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
