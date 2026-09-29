@@ -11,6 +11,7 @@ class Organization(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
+    api_key_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     aws_accounts = relationship("AWSAccount", back_populates="organization", cascade="all, delete-orphan")
