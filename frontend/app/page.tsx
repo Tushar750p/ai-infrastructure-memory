@@ -170,7 +170,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email: authEmail, password: "placeholder-password" }),
+        body: JSON.stringify({ email: authEmail }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Password reset request failed");
