@@ -63,6 +63,8 @@ export default function Home() {
   const [fixMemoryLoading, setFixMemoryLoading] = useState(false);
   const [similarFixes, setSimilarFixes] = useState<any>(null);
   const [similarFixesLoading, setSimilarFixesLoading] = useState(false);
+  const [incidentTimeline, setIncidentTimeline] = useState<any>(null);
+  const [incidentTimelineLoading, setIncidentTimelineLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -180,6 +182,24 @@ export default function Home() {
   }
 
 
+
+
+  async function loadIncidentTimeline(incidentId: number) {
+    if (!organizationId) return;
+    setIncidentTimelineLoading(true);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/incidents/" + incidentId + "/timeline?lookback_minutes=120&limit=100",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Incident timeline API returned " + response.status);
+      setIncidentTimeline(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load incident timeline");
+    } finally {
+      setIncidentTimelineLoading(false);
+    }
+  }
 
   async function loadSimilarFixesForResource(resourceId: number) {
     if (!organizationId) return;
@@ -371,6 +391,22 @@ export default function Home() {
 
 
 
+
+          {incidentTimelineLoading && <p style={{ marginTop: 12, color: "#38bdf8" }}>Building incident timeline...</p>}
+          {incidentTimeline?.timeline?.length > 0 && (
+            <div style={{ marginTop: 12, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
+              <strong>Incident Timeline</strong>
+              {incidentTimeline.timeline.map((item: any, index: number) => (
+                <div key={index} style={{ display: "flex", gap: 10, marginTop: 10, padding: 10, borderRadius: 8, background: "#102033" }}>
+                  <div style={{ minWidth: 125, color: "#64748b", fontSize: 10 }}>{new Date(item.timestamp).toLocaleString()}</div>
+                  <div>
+                    <strong style={{ fontSize: 12 }}>{item.title}</strong>
+                    <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 3 }}>{item.type} · {item.summary}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {similarFixesLoading && <p style={{ marginTop: 12, color: "#fbbf24" }}>Finding similar verified fixes...</p>}
           {similarFixes?.fixes?.length > 0 && (
             <div style={{ marginTop: 12, background: "#111827", border: "1px solid #334155", borderRadius: 10, padding: 16 }}>
