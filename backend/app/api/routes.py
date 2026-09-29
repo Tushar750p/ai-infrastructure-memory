@@ -69,6 +69,39 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
     return {"user_id": user.id, "email": user.email, "full_name": user.full_name}
 
 
+@router.post("/auth/organizations")
+def create_organization(
+    payload: dict,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    name = str(payload.get("name", "")).strip()
+    if not name or len(name) > 200:
+        raise HTTPException(status_code=400, detail="Organization name is required")
+
+    if db.scalar(select(Organization).where(Organization.name == name)):
+        raise HTTPException(status_code=409, detail="Organization name is already in use")
+
+    api_key = secrets.token_urlsafe(32)
+    organization = Organization(
+        name=name,
+        api_key_hash=hashlib.sha256(api_key.encode()).hexdigest(),
+    )
+    db.add(organization)
+    db.flush()
+    db.add(OrganizationMembership(
+        organization_id=organization.id,
+        user_id=user.id,
+        role="owner",
+    ))
+    db.commit()
+    return {
+        "organization_id": organization.id,
+        "name": organization.name,
+        "api_key": api_key,
+    }
+
+
 @router.post("/auth/login")
 def login_user(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
