@@ -48,6 +48,8 @@ export default function Home() {
   const [memberRole, setMemberRole] = useState("viewer");
   const [membersLoading, setMembersLoading] = useState(false);
   const [memberMessage, setMemberMessage] = useState("");
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
@@ -93,6 +95,8 @@ export default function Home() {
     if (apiKey) headers.set("X-AIME-API-Key", apiKey);
     return fetch(input, { ...init, headers, credentials: "include" });
   }
+
+  useEffect(() => { loadAuditLogs(); }, [organizationId, authUser]);
 
   async function loadCurrentUser() {
     try {
@@ -199,6 +203,23 @@ export default function Home() {
       setAuthMessage(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  async function loadAuditLogs() {
+    if (!organizationId || !authUser) return;
+    const membership = authUser.organizations?.find((item: any) => String(item.organization_id) === String(organizationId));
+    if (!membership || !["owner", "admin"].includes(membership.role)) return;
+    setAuditLoading(true);
+    try {
+      const response = await apiFetch(API_BASE + "/api/auth/organizations/" + organizationId + "/audit-logs", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Unable to load audit logs");
+      setAuditLogs(data.logs || []);
+    } catch {
+      setAuditLogs([]);
+    } finally {
+      setAuditLoading(false);
     }
   }
 
@@ -960,6 +981,25 @@ export default function Home() {
           )}
         </section>
 
+        {authUser && auditLogs.length > 0 && (
+          <section style={{ marginTop: 28, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ padding: "20px 22px", borderBottom: "1px solid #1e293b" }}>
+              <h2 style={{ margin: 0 }}>Security Audit Log</h2>
+              <p style={{ color: "#64748b", marginBottom: 0 }}>Recent authentication and security events for this organization.</p>
+            </div>
+            {auditLoading ? <p style={{ padding: 22, color: "#38bdf8" }}>Loading security events...</p> : auditLogs.map((log) => (
+              <article key={log.id} style={{ padding: "14px 22px", borderTop: "1px solid #172235" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
+                  <strong>{log.action}</strong>
+                  <time style={{ color: "#64748b", fontSize: 12 }}>{new Date(log.created_at).toLocaleString()}</time>
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6 }}>
+                  User #{log.user_id ?? "system"} · IP {log.ip_address || "—"}
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
         <section style={{ marginTop: 28, background: "#0b1728", border: "1px solid #1e293b", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ padding: "20px 22px", borderBottom: "1px solid #1e293b" }}>
             <h2 style={{ margin: 0 }}>Infrastructure Timeline</h2>
