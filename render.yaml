@@ -3,7 +3,7 @@ services:
     name: aime-api
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: .
+    dockerContext: ./backend
     healthCheckPath: /health/ready
     autoDeploy: true
     envVars:
