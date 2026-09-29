@@ -130,14 +130,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          CLUSTER="$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)"
           TASK_DEF="$(terraform -chdir="$TF_DIR" output -raw migration_task_definition)"
           SUBNETS="$(terraform -chdir="$TF_DIR" output -json private_subnet_ids | jq -r 'join(",")')"
           SG="$(terraform -chdir="$TF_DIR" output -raw ecs_security_group_id)"
-          TASK_ARN="$(aws ecs run-task             --cluster aime-cluster             --task-definition "$TASK_DEF"             --launch-type FARGATE             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}"             --query 'tasks[0].taskArn' --output text)"
-          aws ecs wait tasks-stopped --cluster aime-cluster --tasks "$TASK_ARN"
-          EXIT_CODE="$(aws ecs describe-tasks --cluster aime-cluster --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)"
+          TASK_ARN="$(aws ecs run-task             --cluster "$CLUSTER"             --task-definition "$TASK_DEF"             --launch-type FARGATE             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}"             --query 'tasks[0].taskArn' --output text)"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE="$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)"
           test "$EXIT_CODE" = "0"
 
       - name: ECS deployment status
         run: |
-          aws ecs wait services-stable --cluster aime-cluster --services aime-backend aime-frontend
+          CLUSTER="$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)"
+          BACKEND_SERVICE="$(terraform -chdir="$TF_DIR" output -raw ecs_backend_service_name)"
+          FRONTEND_SERVICE="$(terraform -chdir="$TF_DIR" output -raw ecs_frontend_service_name)"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$BACKEND_SERVICE" "$FRONTEND_SERVICE"
