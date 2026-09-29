@@ -108,6 +108,119 @@ def link_existing_organization(
     return {"organization_id": organization_id, "role": "owner", "status": "linked"}
 
 
+@router.get("/auth/organizations/{organization_id}/members")
+def list_organization_members(
+    organization_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    membership = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    if not membership:
+        raise HTTPException(status_code=403, detail="Organization access denied")
+    members = db.scalars(
+        select(OrganizationMembership)
+        .where(OrganizationMembership.organization_id == organization_id)
+        .order_by(OrganizationMembership.id)
+    ).all()
+    return {
+        "organization_id": organization_id,
+        "members": [
+            {
+                "user_id": member.user_id,
+                "email": member.user.email,
+                "full_name": member.user.full_name,
+                "role": member.role,
+            }
+            for member in members
+        ],
+    }
+
+
+@router.post("/auth/organizations/{organization_id}/members")
+def add_organization_member(
+    organization_id: int,
+    payload: dict,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    actor = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    if not actor or actor.role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Owner or admin access required")
+
+    email = normalize_email(str(payload.get("email", "")))
+    role = str(payload.get("role", "viewer")).strip().lower()
+    if not email or role not in {"admin", "viewer"}:
+        raise HTTPException(status_code=400, detail="Valid email and role are required")
+
+    target = db.scalar(select(User).where(User.email == email))
+    if not target:
+        raise HTTPException(status_code=404, detail="User must create an AIME account before being added")
+
+    existing = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == target.id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="User is already a member")
+
+    db.add(OrganizationMembership(
+        organization_id=organization_id,
+        user_id=target.id,
+        role=role,
+    ))
+    db.commit()
+    return {"organization_id": organization_id, "user_id": target.id, "role": role, "status": "added"}
+
+
+@router.patch("/auth/organizations/{organization_id}/members/{member_user_id}")
+def update_organization_member_role(
+    organization_id: int,
+    member_user_id: int,
+    payload: dict,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    actor = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    if not actor or actor.role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Owner or admin access required")
+
+    target = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == member_user_id,
+        )
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    new_role = str(payload.get("role", "")).strip().lower()
+    if new_role not in {"admin", "viewer"}:
+        raise HTTPException(status_code=400, detail="Role must be admin or viewer")
+    if actor.role == "admin" and target.role == "owner":
+        raise HTTPException(status_code=403, detail="Admins cannot modify the owner")
+
+    target.role = new_role
+    db.commit()
+    return {"organization_id": organization_id, "user_id": member_user_id, "role": new_role, "status": "updated"}
+
+
 @router.post("/auth/organizations")
 def create_organization(
     payload: dict,
