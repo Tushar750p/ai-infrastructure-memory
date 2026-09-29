@@ -49,6 +49,8 @@ export default function Home() {
   const [syncMessage, setSyncMessage] = useState("");
   const [inventorySyncing, setInventorySyncing] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState("");
+  const [incidentMessage, setIncidentMessage] = useState("");
+  const [incidentDetecting, setIncidentDetecting] = useState(false);
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
@@ -252,6 +254,27 @@ export default function Home() {
     }
   }
 
+
+  async function detectIncidents() {
+    if (!organizationId) return;
+    setIncidentDetecting(true);
+    setIncidentMessage("");
+    setError("");
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/incidents/detect?lookback_minutes=15",
+        { method: "POST" },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Incident detection failed");
+      setIncidentMessage(data.incidents_created + " candidate incident(s) detected.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Incident detection failed");
+    } finally {
+      setIncidentDetecting(false);
+    }
+  }
+
   async function syncInventory() {
     if (!awsAccountId) return;
     setInventorySyncing(true);
@@ -303,6 +326,9 @@ export default function Home() {
               <button onClick={syncCloudTrail} disabled={syncing} style={{ marginTop: 8, marginLeft: 8, background: "#7c3aed", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: syncing ? 0.6 : 1 }}>
                 {syncing ? "Syncing CloudTrail..." : "Sync CloudTrail"}
               </button>
+<button onClick={detectIncidents} disabled={incidentDetecting || !organizationId} style={{ marginTop: 8, marginLeft: 8, background: "#dc2626", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: incidentDetecting ? 0.6 : 1 }}>
+                {incidentDetecting ? "Detecting..." : "Detect Incidents"}
+              </button>
               <button onClick={syncInventory} disabled={inventorySyncing} style={{ marginTop: 8, marginLeft: 8, background: "#0891b2", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: inventorySyncing ? 0.6 : 1 }}>
                 {inventorySyncing ? "Discovering AWS..." : "Sync Infrastructure"}
               </button>
@@ -310,6 +336,7 @@ export default function Home() {
           )}
           {syncMessage && <p style={{ color: "#a78bfa" }}>{syncMessage}</p>}
           {inventoryMessage && <p style={{ color: "#67e8f9" }}>{inventoryMessage}</p>}
+          {incidentMessage && <p style={{ color: "#f87171" }}>{incidentMessage}</p>}
         </section>
 
         <section style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
