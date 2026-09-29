@@ -15,6 +15,7 @@ from app.models.organization import Organization
 import hashlib
 import secrets
 from app.services.aws_credentials import build_aws_session, encrypt_secret, build_role_session, build_account_session
+from app.services.aws_health import update_account_health
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.correlation import correlate_resource_changes
@@ -158,7 +159,7 @@ def list_aws_accounts(
     }
 
 
-@router.post("/organizations/{organization_id}/aws/accounts/{account_id}/health")
+@router.post("/organizations/{organization_id}/aws/accounts/{account_id}/health", dependencies=[Depends(require_org_access)])
 def check_aws_account_health(
     organization_id: int,
     account_id: int,
@@ -174,31 +175,19 @@ def check_aws_account_health(
     if not account:
         raise HTTPException(status_code=404, detail="AWS account not found")
 
-    checked_at = datetime.now(timezone.utc)
-    try:
-        session = build_account_session(account, settings.credentials_encryption_key)
-        identity = session.client("sts", region_name=account.region).get_caller_identity()
-        if identity.get("Account") != account.account_id:
-            raise ValueError("AWS account identity does not match the connected account")
-        account.last_health_status = "healthy"
-        account.last_health_error = None
-        status = "healthy"
-        error = None
-    except Exception as exc:
-        account.last_health_status = "unhealthy"
-        account.last_health_error = str(exc)[:1000]
-        status = "unhealthy"
-        error = account.last_health_error
-
-    account.last_health_check_at = checked_at
+    status = update_account_health(
+        account,
+        settings.credentials_encryption_key,
+        settings.aws_session_duration_seconds,
+    )
     db.commit()
 
     return {
         "account_id": account.id,
         "aws_account_id": account.account_id,
         "status": status,
-        "checked_at": checked_at,
-        "error": error,
+        "checked_at": account.last_health_check_at,
+        "error": account.last_health_error,
     }
 
 
