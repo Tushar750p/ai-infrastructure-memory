@@ -89,8 +89,11 @@ def require_user(
 
 
 @router.post("/auth/register")
-def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register_user(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
+    client_ip = request.client.host if request.client else "unknown"
+    check_auth_rate_limit("register:email:" + email)
+    check_auth_rate_limit("register:ip:" + client_ip)
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="Email is already registered")
 
@@ -291,9 +294,11 @@ class PasswordResetEmailRequest(BaseModel):
 
 
 @router.post("/auth/password-reset/request")
-def request_password_reset(payload: PasswordResetEmailRequest, db: Session = Depends(get_db)):
+def request_password_reset(payload: PasswordResetEmailRequest, request: Request, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
-    check_auth_rate_limit("reset:" + email)
+    client_ip = request.client.host if request.client else "unknown"
+    check_auth_rate_limit("reset:email:" + email)
+    check_auth_rate_limit("reset:ip:" + client_ip)
     user = db.scalar(select(User).where(User.email == email))
     if user and user.is_active:
         raw_token = secrets.token_urlsafe(48)
