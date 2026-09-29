@@ -14,7 +14,7 @@ from app.models.infrastructure_graph import InfrastructureRelationship, Infrastr
 from app.models.organization import Organization
 import hashlib
 import secrets
-from app.services.aws_credentials import build_aws_session, encrypt_secret
+from app.services.aws_credentials import build_aws_session, encrypt_secret, build_role_session
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.correlation import correlate_resource_changes
@@ -53,15 +53,28 @@ def require_org_access(
 class AWSAccountCreate(BaseModel):
     api_key: str | None = Field(default=None, min_length=16, max_length=256)
     organization_name: str = Field(min_length=1, max_length=200)
-    access_key_id: str = Field(min_length=16, max_length=128)
-    secret_access_key: str = Field(min_length=16, max_length=256)
+    credential_mode: str = Field(default="access_key", pattern="^(access_key|role)$")
+    access_key_id: str | None = Field(default=None, min_length=16, max_length=128)
+    secret_access_key: str | None = Field(default=None, min_length=16, max_length=256)
+    role_arn: str | None = Field(default=None, max_length=2048)
+    external_id: str | None = Field(default=None, max_length=256)
     region: str = Field(default="us-east-1", min_length=1, max_length=32)
 
 
 @router.post("/aws/accounts")
 def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
     settings = get_settings()
-    session = build_aws_session(payload.access_key_id, payload.secret_access_key, payload.region)
+    if payload.credential_mode == "role":
+        if not payload.role_arn:
+            raise HTTPException(status_code=400, detail="role_arn is required for role credential mode")
+        try:
+            session = build_role_session(payload.role_arn, payload.external_id, payload.region, settings.aws_session_duration_seconds)
+        except (BotoCoreError, ClientError) as exc:
+            raise HTTPException(status_code=400, detail="AWS IAM role verification failed") from exc
+    else:
+        if not payload.access_key_id or not payload.secret_access_key:
+            raise HTTPException(status_code=400, detail="Access key credentials are required")
+        session = build_aws_session(payload.access_key_id, payload.secret_access_key, payload.region)
     try:
         identity = session.client("sts", region_name=payload.region).get_caller_identity()
     except (BotoCoreError, ClientError) as exc:
@@ -97,8 +110,11 @@ def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
         organization_id=organization.id,
         account_id=account_id,
         region=payload.region,
-        encrypted_access_key_id=encrypt_secret(payload.access_key_id, settings.credentials_encryption_key),
-        encrypted_secret_access_key=encrypt_secret(payload.secret_access_key, settings.credentials_encryption_key),
+        credential_mode=payload.credential_mode,
+        role_arn=payload.role_arn,
+        external_id=encrypt_secret(payload.external_id, settings.credentials_encryption_key) if payload.external_id else None,
+        encrypted_access_key_id=encrypt_secret(payload.access_key_id, settings.credentials_encryption_key) if payload.access_key_id else None,
+        encrypted_secret_access_key=encrypt_secret(payload.secret_access_key, settings.credentials_encryption_key) if payload.secret_access_key else None,
         enabled=True,
     )
     db.add(account)
