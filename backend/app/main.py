@@ -19,6 +19,7 @@ from app.models.organization import Organization  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.organization_membership import OrganizationMembership  # noqa: F401
 from app.models.user_session import UserSession  # noqa: F401
+from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 from app.services.collector import cloudtrail_worker
 
 
