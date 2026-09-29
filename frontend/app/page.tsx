@@ -405,7 +405,8 @@ export default function Home() {
     if (organizationId) {
       loadEvents();
       loadIncidents();
-      loadGraph();\n      loadMembers();
+      loadGraph();
+      loadMembers();
     }
   }, [organizationId]);
 
