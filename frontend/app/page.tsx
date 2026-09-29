@@ -46,6 +46,8 @@ export default function Home() {
   const [connecting, setConnecting] = useState(false);
   const [connectMessage, setConnectMessage] = useState("");
   const [awsAccountId, setAwsAccountId] = useState("");
+  const [awsHealth, setAwsHealth] = useState<any>(null);
+  const [awsHealthLoading, setAwsHealthLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [inventorySyncing, setInventorySyncing] = useState(false);
@@ -132,6 +134,25 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "AWS connection failed");
     } finally {
       setConnecting(false);
+    }
+  }
+
+
+  async function checkAwsHealth() {
+    if (!organizationId || !awsAccountId) return;
+    setAwsHealthLoading(true);
+    try {
+      const response = await apiFetch(
+        API_BASE + "/api/organizations/" + organizationId + "/aws/accounts/" + awsAccountId + "/health",
+        { method: "POST" },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "AWS health check failed");
+      setAwsHealth(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AWS health check failed");
+    } finally {
+      setAwsHealthLoading(false);
     }
   }
 
@@ -430,7 +451,21 @@ export default function Home() {
           {connectMessage && <p style={{ color: "#4ade80" }}>{connectMessage}</p>}
           {awsAccountId && (
             <>
-              <button onClick={syncCloudTrail} disabled={syncing} style={{ marginTop: 8, marginLeft: 8, background: "#7c3aed", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: syncing ? 0.6 : 1 }}>
+    
+          {awsAccountId && (
+            <div style={{ marginTop: 10 }}>
+              <button onClick={checkAwsHealth} disabled={awsHealthLoading}>
+                {awsHealthLoading ? "Checking AWS..." : "Check AWS Connection"}
+              </button>
+              {awsHealth && (
+                <span style={{ marginLeft: 10, fontSize: 12 }}>
+                  AWS: <strong>{awsHealth.status}</strong>
+                  {awsHealth.checked_at ? " · " + new Date(awsHealth.checked_at).toLocaleString() : ""}
+                </span>
+              )}
+            </div>
+          )}
+          <button onClick={syncCloudTrail} disabled={syncing} style={{ marginTop: 8, marginLeft: 8, background: "#7c3aed", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: syncing ? 0.6 : 1 }}>
                 {syncing ? "Syncing CloudTrail..." : "Sync CloudTrail"}
               </button>
 <button onClick={detectIncidents} disabled={incidentDetecting || !organizationId} style={{ marginTop: 8, marginLeft: 8, background: "#dc2626", border: 0, borderRadius: 8, padding: "11px 18px", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: incidentDetecting ? 0.6 : 1 }}>
