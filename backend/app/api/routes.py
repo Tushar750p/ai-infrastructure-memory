@@ -16,6 +16,8 @@ from app.services.aws_credentials import build_aws_session, encrypt_secret
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.correlation import correlate_resource_changes
+from app.services.incident_analysis import build_root_cause_analysis
+from app.models.infrastructure_incident import InfrastructureIncident
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
@@ -145,6 +147,108 @@ def infrastructure_graph(organization_id: int, db: Session = Depends(get_db)):
             for relationship in relationships
         ],
     }
+
+
+class IncidentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    resource_id: int | None = None
+    severity: str = Field(default="medium", max_length=50)
+    summary: str | None = None
+
+
+@router.post("/organizations/{organization_id}/incidents")
+def create_incident(
+    organization_id: int,
+    payload: IncidentCreate,
+    db: Session = Depends(get_db),
+):
+    if payload.resource_id is not None:
+        resource = db.scalar(
+            select(InfrastructureResource).where(
+                InfrastructureResource.id == payload.resource_id,
+                InfrastructureResource.organization_id == organization_id,
+            )
+        )
+        if not resource:
+            raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    incident = InfrastructureIncident(
+        organization_id=organization_id,
+        resource_id=payload.resource_id,
+        title=payload.title,
+        severity=payload.severity,
+        summary=payload.summary,
+    )
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+
+    return {
+        "id": incident.id,
+        "organization_id": incident.organization_id,
+        "resource_id": incident.resource_id,
+        "title": incident.title,
+        "severity": incident.severity,
+        "status": incident.status,
+        "started_at": incident.started_at,
+    }
+
+
+@router.get("/organizations/{organization_id}/incidents")
+def list_incidents(
+    organization_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    incidents = db.scalars(
+        select(InfrastructureIncident)
+        .where(InfrastructureIncident.organization_id == organization_id)
+        .order_by(InfrastructureIncident.started_at.desc())
+        .limit(max(1, min(limit, 200)))
+    ).all()
+    return {
+        "organization_id": organization_id,
+        "count": len(incidents),
+        "incidents": [
+            {
+                "id": incident.id,
+                "title": incident.title,
+                "severity": incident.severity,
+                "status": incident.status,
+                "resource_id": incident.resource_id,
+                "started_at": incident.started_at,
+                "resolved_at": incident.resolved_at,
+                "summary": incident.summary,
+                "root_cause": incident.root_cause,
+            }
+            for incident in incidents
+        ],
+    }
+
+
+@router.get("/organizations/{organization_id}/resources/{resource_id}/rca")
+def resource_root_cause_analysis(
+    organization_id: int,
+    resource_id: int,
+    lookback_minutes: int = 60,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    return build_root_cause_analysis(
+        db,
+        resource,
+        lookback_minutes=lookback_minutes,
+        limit=limit,
+    )
 
 
 @router.get("/organizations/{organization_id}/resources/{resource_id}/correlation")
