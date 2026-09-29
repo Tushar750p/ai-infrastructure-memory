@@ -69,6 +69,45 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)):
     return {"user_id": user.id, "email": user.email, "full_name": user.full_name}
 
 
+@router.post("/auth/organizations/link")
+def link_existing_organization(
+    payload: dict,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    organization_id = payload.get("organization_id")
+    api_key = payload.get("api_key")
+    if not isinstance(organization_id, int) or not isinstance(api_key, str) or len(api_key) < 16:
+        raise HTTPException(status_code=400, detail="organization_id and API key are required")
+
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    organization = db.scalar(
+        select(Organization).where(
+            Organization.id == organization_id,
+            Organization.api_key_hash == key_hash,
+        )
+    )
+    if not organization:
+        raise HTTPException(status_code=403, detail="Invalid organization credentials")
+
+    existing = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    if existing:
+        return {"organization_id": organization_id, "role": existing.role, "status": "already_linked"}
+
+    db.add(OrganizationMembership(
+        organization_id=organization_id,
+        user_id=user.id,
+        role="owner",
+    ))
+    db.commit()
+    return {"organization_id": organization_id, "role": "owner", "status": "linked"}
+
+
 @router.post("/auth/organizations")
 def create_organization(
     payload: dict,
