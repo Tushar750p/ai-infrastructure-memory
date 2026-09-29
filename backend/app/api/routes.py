@@ -164,6 +164,46 @@ def link_existing_organization(
     return {"organization_id": organization_id, "role": "owner", "status": "linked"}
 
 
+@router.get("/auth/organizations/{organization_id}/audit-logs")
+def list_auth_audit_logs(
+    organization_id: int,
+    limit: int = 100,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    membership = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    if not membership or membership.role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Owner or admin access required")
+
+    limit = max(1, min(limit, 200))
+    logs = db.scalars(
+        select(AuthAuditLog)
+        .where(AuthAuditLog.organization_id == organization_id)
+        .order_by(AuthAuditLog.created_at.desc())
+        .limit(limit)
+    ).all()
+    return {
+        "organization_id": organization_id,
+        "count": len(logs),
+        "logs": [
+            {
+                "id": log.id,
+                "user_id": log.user_id,
+                "action": log.action,
+                "ip_address": log.ip_address,
+                "user_agent": log.user_agent,
+                "created_at": log.created_at,
+            }
+            for log in logs
+        ],
+    }
+
+
 @router.get("/auth/organizations/{organization_id}/members")
 def list_organization_members(
     organization_id: int,
