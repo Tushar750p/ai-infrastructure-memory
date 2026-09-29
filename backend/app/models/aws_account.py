@@ -19,6 +19,9 @@ class AWSAccount(Base):
     encrypted_access_key_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     encrypted_secret_access_key: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_health_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_health_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_health_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
