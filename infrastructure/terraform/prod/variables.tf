@@ -22,3 +22,4 @@ variable "password_reset_url" { type=string }
 variable "email_verification_url" { type=string }
 variable "backend_image" { type=string }
 variable "frontend_image" { type=string }
+variable "acm_certificate_arn" { type=string default="" }
