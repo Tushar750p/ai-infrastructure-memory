@@ -87,6 +87,18 @@ jobs:
           TF_VAR_frontend_image: ${{ steps.repos.outputs.frontend }}:${GITHUB_SHA}
         run: terraform -chdir="$TF_DIR" apply -auto-approve
 
+      - name: Run Alembic migration task
+        shell: bash
+        run: |
+          set -euo pipefail
+          TASK_DEF="$(terraform -chdir="$TF_DIR" output -raw migration_task_definition)"
+          SUBNETS="$(terraform -chdir="$TF_DIR" output -json private_subnet_ids | jq -r 'join(",")')"
+          SG="$(terraform -chdir="$TF_DIR" output -raw ecs_security_group_id)"
+          TASK_ARN="$(aws ecs run-task             --cluster aime-cluster             --task-definition "$TASK_DEF"             --launch-type FARGATE             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}"             --query 'tasks[0].taskArn' --output text)"
+          aws ecs wait tasks-stopped --cluster aime-cluster --tasks "$TASK_ARN"
+          EXIT_CODE="$(aws ecs describe-tasks --cluster aime-cluster --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)"
+          test "$EXIT_CODE" = "0"
+
       - name: ECS deployment status
         run: |
           aws ecs wait services-stable --cluster aime-cluster --services aime-backend aime-frontend
