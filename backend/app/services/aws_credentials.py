@@ -48,7 +48,7 @@ def build_account_session(account, encryption_key: str, duration_seconds: int = 
             raise ValueError("AWS role credential mode requires role_arn")
         return build_role_session(
             account.role_arn,
-            account.external_id,
+            decrypt_secret(account.external_id, encryption_key) if account.external_id else None,
             account.region,
             duration_seconds,
         )
