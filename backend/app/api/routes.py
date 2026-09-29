@@ -354,6 +354,48 @@ def list_incident_fixes(
     }
 
 
+@router.get("/organizations/{organization_id}/resources/{resource_id}/timeline")
+def resource_incident_timeline(
+    organization_id: int,
+    resource_id: int,
+    lookback_minutes: int = 120,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    resource = db.scalar(
+        select(InfrastructureResource).where(
+            InfrastructureResource.id == resource_id,
+            InfrastructureResource.organization_id == organization_id,
+        )
+    )
+    if not resource:
+        raise HTTPException(status_code=404, detail="Infrastructure resource not found")
+
+    incident = db.scalar(
+        select(InfrastructureIncident)
+        .where(
+            InfrastructureIncident.organization_id == organization_id,
+            InfrastructureIncident.resource_id == resource_id,
+        )
+        .order_by(InfrastructureIncident.started_at.desc())
+    )
+    if not incident:
+        return {
+            "resource_id": resource_id,
+            "incident": None,
+            "count": 0,
+            "timeline": [],
+            "analysis": "No incident history exists for this resource yet.",
+        }
+
+    return build_incident_timeline(
+        db,
+        incident,
+        lookback_minutes=lookback_minutes,
+        limit=limit,
+    )
+
+
 @router.get("/organizations/{organization_id}/resources/{resource_id}/similar-fixes")
 def similar_resource_fixes(
     organization_id: int,
