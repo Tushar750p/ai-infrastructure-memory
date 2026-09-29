@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: .
-      CREDENTIALS_ENCRYPTION_KEY: "test-only-key-for-ci"
+      CREDENTIALS_ENCRYPTION_KEY: "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
 
     defaults:
       run:
