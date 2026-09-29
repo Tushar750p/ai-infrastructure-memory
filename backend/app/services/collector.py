@@ -9,6 +9,7 @@ from app.database.db import SessionLocal
 from app.models.aws_account import AWSAccount
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.aws_health import update_account_health
+from app.services.aws_health_incident import record_health_incident
 from app.services.cloudtrail import collect_cloudtrail_events
 from app.services.incident_detection import detect_incidents_for_account
 from app.services.cloudwatch import collect_cloudwatch_metrics
@@ -29,6 +30,18 @@ def sync_all_accounts() -> int:
         for account in accounts:
             try:
                 health = update_account_health(account, settings.credentials_encryption_key, settings.aws_session_duration_seconds)
+                record_health_incident(db, account, error=account.last_health_error)
+                if health == "healthy":
+                    open_incident = db.scalar(select(__import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident).where(
+                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.organization_id == account.organization_id,
+                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.aws_account_id == account.id,
+                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.status == "open",
+                        __import__("app.models.infrastructure_incident", fromlist=["InfrastructureIncident"]).InfrastructureIncident.title == "AWS connection unhealthy",
+                    ))
+                    if open_incident:
+                        open_incident.status = "resolved"
+                        open_incident.resolved_at = account.last_health_check_at
+                        open_incident.root_cause = "AWS connection health check recovered."
                 db.commit()
                 logger.info("AIME AWS health for account %s: %s", account.id, health)
             except Exception:
