@@ -9,6 +9,7 @@ from app.models.aws_account import AWSAccount  # noqa: F401
 from app.models.infrastructure_event import InfrastructureEvent  # noqa: F401
 from app.models.infrastructure_incident import InfrastructureIncident  # noqa: F401
 from app.models.infrastructure_fix import InfrastructureFix  # noqa: F401
+from app.models.infrastructure_metric import InfrastructureMetric  # noqa: F401
 from app.models.infrastructure_graph import InfrastructureRelationship, InfrastructureResource  # noqa: F401
 from app.models.organization import Organization  # noqa: F401
 from app.services.collector import cloudtrail_worker
