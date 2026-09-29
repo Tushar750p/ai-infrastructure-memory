@@ -32,5 +32,5 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Run authentication tests
-        run: pytest -q tests/test_auth.py
+      - name: Run backend test suite
+        run: pytest -q
