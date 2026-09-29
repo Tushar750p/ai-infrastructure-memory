@@ -7,6 +7,7 @@ from app.models.infrastructure_event import InfrastructureEvent
 from app.models.infrastructure_graph import InfrastructureResource
 from app.models.infrastructure_incident import InfrastructureIncident
 from app.models.infrastructure_metric import InfrastructureMetric
+from app.services.anomaly_detection import detect_metric_anomalies
 
 HIGH_SIGNAL_PREFIXES = (
     "Modify", "Update", "Delete", "Stop", "Terminate", "Reboot",
@@ -61,7 +62,18 @@ def detect_incidents_for_account(
             continue
 
         metric_evidence = []
+        anomaly_evidence = []
         if resource:
+            anomaly_evidence = detect_metric_anomalies(
+                db,
+                organization_id=organization_id,
+                resource_id=resource.id,
+                lookback_minutes=lookback_minutes,
+                baseline_minutes=360,
+                z_threshold=2.5,
+                limit=20,
+            )
+
             metrics = db.scalars(
                 select(InfrastructureMetric)
                 .where(
@@ -104,6 +116,7 @@ def detect_incidents_for_account(
             }, {
                 "type": "telemetry",
                 "metrics": metric_evidence,
+                "anomalies": anomaly_evidence,
             }],
         )
         db.add(incident)
