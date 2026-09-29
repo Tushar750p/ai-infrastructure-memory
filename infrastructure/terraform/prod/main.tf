@@ -189,7 +189,7 @@ resource "aws_ecs_task_definition" "backend" {
     name = "backend"; image = var.backend_image; essential = true
     portMappings = [{ containerPort = 8000, protocol = "tcp" }]
     environment = [
-      { name="DATABASE_URL", value="postgresql+psycopg2://${var.db_username}:${var.db_password}${aws_db_instance.this.address}:5432/${var.db_name}" },
+      { name="DATABASE_URL", value="postgresql+psycopg2://${var.db_username}:${var.db_password}@${aws_db_instance.this.address}:5432/${var.db_name}" },
       { name="REDIS_URL", value="rediss://${aws_elasticache_replication_group.this.primary_endpoint_address}:6379/0" },
       { name="CREDENTIALS_ENCRYPTION_KEY", value=var.credentials_encryption_key },
       { name="AWS_SESSION_DURATION_SECONDS", value=tostring(var.aws_session_duration_seconds) },
