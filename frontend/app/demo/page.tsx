@@ -31,7 +31,10 @@ export default function DemoLanding() {
             AIME connects infrastructure changes, incidents, telemetry, RCA and verified fixes into a persistent operational memory for engineering teams.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 34 }}>
-            <Link href="/" style={{ background: "#38bdf8", color: "#03111d", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 800 }}>
+            <Link href="/demo/experience" style={{ background: "#38bdf8", color: "#03111d", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 800 }}>
+              Experience AIME Demo →
+            </Link>
+            <Link href="/" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>
               Try AIME Console
             </Link>
             <a href="#capabilities" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>
@@ -62,12 +65,12 @@ export default function DemoLanding() {
         </section>
 
         <section style={{ textAlign: "center", padding: "78px 0 20px" }}>
-          <h2 style={{ fontSize: 34, margin: 0 }}>See AIME in action.</h2>
+          <h2 style={{ fontSize: 34, margin: 0 }}>See the memory loop in action.</h2>
           <p style={{ color: "#94a3b8", margin: "12px auto 24px", maxWidth: 600 }}>
-            Open the console to explore the infrastructure memory, graph, incident intelligence, RCA and fix-memory workflows.
+            Walk through a simulated production incident: change → impact → RCA → previous incident → verified fix.
           </p>
-          <Link href="/" style={{ display: "inline-block", background: "#38bdf8", color: "#03111d", padding: "14px 24px", borderRadius: 10, textDecoration: "none", fontWeight: 800 }}>
-            Launch AIME →
+          <Link href="/demo/experience" style={{ display: "inline-block", background: "#38bdf8", color: "#03111d", padding: "14px 24px", borderRadius: 10, textDecoration: "none", fontWeight: 800 }}>
+            Start Interactive Demo →
           </Link>
         </section>
 
