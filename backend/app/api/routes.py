@@ -446,6 +446,36 @@ def confirm_password_reset(payload: PasswordResetRequest, request: Request, db: 
     return {"status": "password_reset"}
 
 
+class EmailVerificationResendRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+
+
+@router.post("/auth/email-verification/resend")
+def resend_email_verification(
+    payload: EmailVerificationResendRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    email = normalize_email(payload.email)
+    client_ip = request.client.host if request.client else "unknown"
+    check_auth_rate_limit("verify-resend:email:" + email)
+    check_auth_rate_limit("verify-resend:ip:" + client_ip)
+
+    user = db.scalar(select(User).where(User.email == email))
+    if user and not user.is_active:
+        raw_token = secrets.token_urlsafe(48)
+        db.add(EmailVerificationToken(
+            user_id=user.id,
+            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        ))
+        record_auth_audit(db, "verification_resent", user_id=user.id, request=request)
+        db.commit()
+        send_email_verification_email(user.email, raw_token)
+
+    return {"status": "accepted", "message": "If the account requires verification, instructions have been sent."}
+
+
 @router.post("/auth/email-verification")
 def verify_email(payload: EmailVerificationRequest, request: Request, db: Session = Depends(get_db)):
     token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
