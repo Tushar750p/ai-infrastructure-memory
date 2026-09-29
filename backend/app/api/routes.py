@@ -31,10 +31,11 @@ from app.services.incident_knowledge import build_incident_knowledge_graph
 from app.models.user import User
 from app.models.password_reset_token import PasswordResetToken
 from app.models.auth_audit_log import AuthAuditLog
+from app.models.email_verification_token import EmailVerificationToken
 from app.models.organization_membership import OrganizationMembership
 from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
 from app.services.redis_client import get_redis
-from app.services.email import send_password_reset_email
+from app.services.email import send_password_reset_email, send_email_verification_email
 
 
 def record_auth_audit(
@@ -88,6 +89,10 @@ def clear_auth_rate_limit(identifier: str) -> None:
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
 
+class EmailVerificationRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+
+
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     password: str = Field(min_length=12, max_length=256)
@@ -118,11 +123,19 @@ def register_user(payload: RegisterRequest, request: Request, db: Session = Depe
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="Email is already registered")
 
-    user = User(email=email, password_hash=hash_password(payload.password), full_name=payload.full_name)
+    user = User(email=email, password_hash=hash_password(payload.password), full_name=payload.full_name, is_active=False)
     db.add(user)
+    db.flush()
+    raw_token = secrets.token_urlsafe(48)
+    db.add(EmailVerificationToken(
+        user_id=user.id,
+        token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    ))
+    record_auth_audit(db, "registration_created", user_id=user.id, request=request)
     db.commit()
-    db.refresh(user)
-    return {"user_id": user.id, "email": user.email, "full_name": user.full_name}
+    send_email_verification_email(user.email, raw_token)
+    return {"user_id": user.id, "email": user.email, "full_name": user.full_name, "status": "verification_required"}
 
 
 @router.post("/auth/organizations/link")
@@ -431,6 +444,25 @@ def confirm_password_reset(payload: PasswordResetRequest, request: Request, db: 
         db.delete(session)
     db.commit()
     return {"status": "password_reset"}
+
+
+@router.post("/auth/email-verification")
+def verify_email(payload: EmailVerificationRequest, request: Request, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    verification = db.scalar(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == token_hash,
+            EmailVerificationToken.used_at.is_(None),
+        )
+    )
+    if not verification or verification.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Invalid or expired verification token")
+
+    verification.user.is_active = True
+    verification.used_at = datetime.now(timezone.utc)
+    record_auth_audit(db, "email_verified", user_id=verification.user.id, request=request)
+    db.commit()
+    return {"status": "email_verified"}
 
 
 @router.post("/auth/login")
