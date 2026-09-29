@@ -29,6 +29,7 @@ from app.services.incident_timeline import build_incident_timeline
 from app.services.incident_intelligence import build_incident_intelligence
 from app.services.incident_knowledge import build_incident_knowledge_graph
 from app.models.user import User
+from app.models.password_reset_token import PasswordResetToken
 from app.models.organization_membership import OrganizationMembership
 from app.services.auth import create_session, delete_session, get_user_from_session, hash_password, normalize_email, verify_password
 from app.services.redis_client import get_redis
@@ -282,6 +283,49 @@ def create_organization(
         "name": organization.name,
         "api_key": api_key,
     }
+
+
+@router.post("/auth/password-reset/request")
+def request_password_reset(payload: LoginRequest, db: Session = Depends(get_db)):
+    email = normalize_email(payload.email)
+    check_auth_rate_limit("reset:" + email)
+    user = db.scalar(select(User).where(User.email == email))
+    if user and user.is_active:
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        db.add(PasswordResetToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ))
+        db.commit()
+    return {"status": "accepted", "message": "If the account exists, reset instructions will be sent."}
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+
+
+@router.post("/auth/password-reset/confirm")
+def confirm_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    reset = db.scalar(
+        select(PasswordResetToken)
+        .where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    if not reset or reset.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    reset.user.password_hash = hash_password(payload.new_password)
+    reset.used_at = datetime.now(timezone.utc)
+    for session in list(reset.user.sessions):
+        db.delete(session)
+    db.commit()
+    return {"status": "password_reset"}
 
 
 @router.post("/auth/login")
