@@ -57,6 +57,8 @@ export default function Home() {
   const [correlationLoading, setCorrelationLoading] = useState(false);
   const [rca, setRca] = useState<any>(null);
   const [rcaLoading, setRcaLoading] = useState(false);
+  const [fixMemory, setFixMemory] = useState<any>(null);
+  const [fixMemoryLoading, setFixMemoryLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -152,10 +154,30 @@ export default function Home() {
 
 
 
+
+  async function loadFixMemory(resourceId: number) {
+    if (!organizationId) return;
+    setFixMemoryLoading(true);
+    setFixMemory(null);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/fix-memory?limit=10",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Fix memory API returned " + response.status);
+      setFixMemory(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load fix memory");
+    } finally {
+      setFixMemoryLoading(false);
+    }
+  }
+
   async function loadRca(resourceId: number) {
     if (!organizationId) return;
     setRcaLoading(true);
     setRca(null);
+    loadFixMemory(resourceId);
     try {
       const response = await fetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/rca?lookback_minutes=60&limit=25",
@@ -280,6 +302,23 @@ export default function Home() {
 
           {correlationLoading && <p style={{ marginTop: 14, color: "#38bdf8" }}>Analyzing recent infrastructure changes...</p>}
 
+
+          {fixMemoryLoading && <p style={{ marginTop: 12, color: "#4ade80" }}>Searching previous fixes...</p>}
+          {fixMemory && (
+            <div style={{ marginTop: 12, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
+              <strong>What Fixed This Before?</strong>
+              {fixMemory.count === 0 && <div style={{ color: "#64748b", fontSize: 12, marginTop: 7 }}>No previous verified fix is stored for this resource.</div>}
+              {fixMemory.fixes?.map((fix: any) => (
+                <div key={fix.id} style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "#102033" }}>
+                  <strong>{fix.title}</strong>
+                  <div style={{ color: "#cbd5e1", fontSize: 12, marginTop: 4 }}>{fix.resolution}</div>
+                  {fix.outcome && <div style={{ color: "#4ade80", fontSize: 11, marginTop: 4 }}>Outcome: {fix.outcome}</div>}
+                  {fix.commands?.length > 0 && <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>Commands: {fix.commands.join(" · ")}</div>}
+                  <div style={{ color: "#64748b", fontSize: 10, marginTop: 4 }}>{fix.verified ? "Verified fix" : "Recorded fix"} · {new Date(fix.created_at).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          )}
           {rcaLoading && <p style={{ marginTop: 12, color: "#c084fc" }}>Building evidence-based RCA...</p>}
           {rca && (
             <div style={{ marginTop: 12, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
