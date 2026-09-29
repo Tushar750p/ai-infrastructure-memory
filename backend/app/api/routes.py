@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.database.db import get_db
 from app.models.aws_account import AWSAccount
 from app.models.infrastructure_event import InfrastructureEvent
+from app.models.infrastructure_graph import InfrastructureRelationship, InfrastructureResource
 from app.models.organization import Organization
 from app.services.aws_credentials import build_aws_session, encrypt_secret
 from app.services.cloudtrail import collect_cloudtrail_events
@@ -105,6 +106,42 @@ def list_infrastructure_events(
                 "summary": event.summary,
             }
             for event in events
+        ],
+    }
+
+
+@router.get("/organizations/{organization_id}/graph")
+def infrastructure_graph(organization_id: int, db: Session = Depends(get_db)):
+    resources = db.scalars(
+        select(InfrastructureResource)
+        .where(InfrastructureResource.organization_id == organization_id)
+        .order_by(InfrastructureResource.resource_type, InfrastructureResource.resource_id)
+    ).all()
+    relationships = db.scalars(
+        select(InfrastructureRelationship)
+        .where(InfrastructureRelationship.organization_id == organization_id)
+    ).all()
+
+    return {
+        "organization_id": organization_id,
+        "nodes": [
+            {
+                "id": resource.id,
+                "type": resource.resource_type,
+                "resource_id": resource.resource_id,
+                "name": resource.name,
+                "region": resource.region,
+                "status": resource.status,
+            }
+            for resource in resources
+        ],
+        "edges": [
+            {
+                "source": relationship.source_resource_id,
+                "target": relationship.target_resource_id,
+                "type": relationship.relationship_type,
+            }
+            for relationship in relationships
         ],
     }
 
