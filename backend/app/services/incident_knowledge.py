@@ -6,7 +6,7 @@ from app.models.infrastructure_event import InfrastructureEvent
 from app.models.infrastructure_fix import InfrastructureFix
 from app.models.infrastructure_incident import InfrastructureIncident
 from app.models.infrastructure_metric import InfrastructureMetric
-from app.models.infrastructure_resource import InfrastructureResource
+from app.models.infrastructure_graph import InfrastructureResource
 
 
 def build_incident_knowledge_graph(
