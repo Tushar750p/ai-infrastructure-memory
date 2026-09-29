@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +12,8 @@ from app.models.aws_account import AWSAccount
 from app.models.infrastructure_event import InfrastructureEvent
 from app.models.infrastructure_graph import InfrastructureRelationship, InfrastructureResource
 from app.models.organization import Organization
+import hashlib
+import secrets
 from app.services.aws_credentials import build_aws_session, encrypt_secret
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
@@ -27,8 +29,29 @@ from app.services.incident_knowledge import build_incident_knowledge_graph
 
 router = APIRouter(prefix="/api", tags=["infrastructure"])
 
+def require_org_access(
+    organization_id: int,
+    x_aime_api_key: str | None = Header(default=None, alias="X-AIME-API-Key"),
+    db: Session = Depends(get_db),
+) -> Organization:
+    if not x_aime_api_key:
+        raise HTTPException(status_code=401, detail="AIME API key required")
+
+    key_hash = hashlib.sha256(x_aime_api_key.encode()).hexdigest()
+    organization = db.scalar(
+        select(Organization).where(
+            Organization.id == organization_id,
+            Organization.api_key_hash == key_hash,
+        )
+    )
+    if not organization:
+        raise HTTPException(status_code=403, detail="Organization access denied")
+    return organization
+
+
 
 class AWSAccountCreate(BaseModel):
+    api_key: str | None = Field(default=None, min_length=16, max_length=256)
     organization_name: str = Field(min_length=1, max_length=200)
     access_key_id: str = Field(min_length=16, max_length=128)
     secret_access_key: str = Field(min_length=16, max_length=256)
@@ -49,10 +72,17 @@ def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="AWS account ID could not be determined")
 
     organization = db.scalar(select(Organization).where(Organization.name == payload.organization_name))
+    generated_api_key = None
     if not organization:
-        organization = Organization(name=payload.organization_name)
+        generated_api_key = secrets.token_urlsafe(32)
+        organization = Organization(
+            name=payload.organization_name,
+            api_key_hash=hashlib.sha256(generated_api_key.encode()).hexdigest(),
+        )
         db.add(organization)
         db.flush()
+    elif not payload.api_key or hashlib.sha256(payload.api_key.encode()).hexdigest() != organization.api_key_hash:
+        raise HTTPException(status_code=403, detail="Valid organization API key required")
 
     existing = db.scalar(
         select(AWSAccount).where(
@@ -81,10 +111,11 @@ def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
         "organization_id": account.organization_id,
         "region": account.region,
         "status": "connected",
+        **({"api_key": generated_api_key} if generated_api_key else {}),
     }
 
 
-@router.get("/organizations/{organization_id}/events")
+@router.get("/organizations/{organization_id}/events", dependencies=[Depends(require_org_access)])
 def list_infrastructure_events(
     organization_id: int,
     limit: int = 50,
@@ -119,7 +150,7 @@ def list_infrastructure_events(
     }
 
 
-@router.get("/organizations/{organization_id}/graph")
+@router.get("/organizations/{organization_id}/graph", dependencies=[Depends(require_org_access)])
 def infrastructure_graph(organization_id: int, db: Session = Depends(get_db)):
     resources = db.scalars(
         select(InfrastructureResource)
@@ -162,7 +193,7 @@ class IncidentCreate(BaseModel):
     summary: str | None = None
 
 
-@router.post("/organizations/{organization_id}/incidents")
+@router.post("/organizations/{organization_id}/incidents", dependencies=[Depends(require_org_access)])
 def create_incident(
     organization_id: int,
     payload: IncidentCreate,
@@ -210,7 +241,7 @@ class FixCreate(BaseModel):
     created_by: str | None = None
 
 
-@router.post("/organizations/{organization_id}/incidents/{incident_id}/fixes")
+@router.post("/organizations/{organization_id}/incidents/{incident_id}/fixes", dependencies=[Depends(require_org_access)])
 def record_incident_fix(
     organization_id: int,
     incident_id: int,
@@ -261,7 +292,7 @@ def record_incident_fix(
     }
 
 
-@router.get("/organizations/{organization_id}/incidents/{incident_id}/knowledge-graph")
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/knowledge-graph", dependencies=[Depends(require_org_access)])
 def incident_knowledge_graph(
     organization_id: int,
     incident_id: int,
@@ -284,7 +315,7 @@ def incident_knowledge_graph(
     )
 
 
-@router.get("/organizations/{organization_id}/incidents/{incident_id}/intelligence")
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/intelligence", dependencies=[Depends(require_org_access)])
 def incident_intelligence(
     organization_id: int,
     incident_id: int,
@@ -314,7 +345,7 @@ def incident_intelligence(
     }
 
 
-@router.get("/organizations/{organization_id}/incidents/{incident_id}/timeline")
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/timeline", dependencies=[Depends(require_org_access)])
 def incident_timeline(
     organization_id: int,
     incident_id: int,
@@ -339,7 +370,7 @@ def incident_timeline(
     )
 
 
-@router.get("/organizations/{organization_id}/incidents/{incident_id}/similar-fixes")
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/similar-fixes", dependencies=[Depends(require_org_access)])
 def similar_incident_fixes(
     organization_id: int,
     incident_id: int,
@@ -365,7 +396,7 @@ def similar_incident_fixes(
     }
 
 
-@router.get("/organizations/{organization_id}/incidents/{incident_id}/fixes")
+@router.get("/organizations/{organization_id}/incidents/{incident_id}/fixes", dependencies=[Depends(require_org_access)])
 def list_incident_fixes(
     organization_id: int,
     incident_id: int,
@@ -409,7 +440,7 @@ def list_incident_fixes(
     }
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/timeline")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/timeline", dependencies=[Depends(require_org_access)])
 def resource_incident_timeline(
     organization_id: int,
     resource_id: int,
@@ -451,7 +482,7 @@ def resource_incident_timeline(
     )
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/similar-fixes")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/similar-fixes", dependencies=[Depends(require_org_access)])
 def similar_resource_fixes(
     organization_id: int,
     resource_id: int,
@@ -492,7 +523,7 @@ def similar_resource_fixes(
     }
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/fix-memory")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/fix-memory", dependencies=[Depends(require_org_access)])
 def resource_fix_memory(
     organization_id: int,
     resource_id: int,
@@ -544,7 +575,7 @@ def resource_fix_memory(
     }
 
 
-@router.post("/organizations/{organization_id}/incidents/detect")
+@router.post("/organizations/{organization_id}/incidents/detect", dependencies=[Depends(require_org_access)])
 def detect_incidents(
     organization_id: int,
     lookback_minutes: int = 15,
@@ -577,7 +608,7 @@ def detect_incidents(
     }
 
 
-@router.get("/organizations/{organization_id}/incidents")
+@router.get("/organizations/{organization_id}/incidents", dependencies=[Depends(require_org_access)])
 def list_incidents(
     organization_id: int,
     limit: int = 50,
@@ -609,7 +640,7 @@ def list_incidents(
     }
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/rca")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/rca", dependencies=[Depends(require_org_access)])
 def resource_root_cause_analysis(
     organization_id: int,
     resource_id: int,
@@ -634,7 +665,7 @@ def resource_root_cause_analysis(
     )
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/correlation")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/correlation", dependencies=[Depends(require_org_access)])
 def resource_correlation(
     organization_id: int,
     resource_id: int,
@@ -659,7 +690,7 @@ def resource_correlation(
     )
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/anomalies")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/anomalies", dependencies=[Depends(require_org_access)])
 def resource_metric_anomalies(
     organization_id: int,
     resource_id: int,
@@ -697,7 +728,7 @@ def resource_metric_anomalies(
     }
 
 
-@router.get("/organizations/{organization_id}/resources/{resource_id}/metrics")
+@router.get("/organizations/{organization_id}/resources/{resource_id}/metrics", dependencies=[Depends(require_org_access)])
 def resource_metrics(
     organization_id: int,
     resource_id: int,
