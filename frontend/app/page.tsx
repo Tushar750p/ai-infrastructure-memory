@@ -161,6 +161,8 @@ export default function Home() {
     if (!organizationId) return;
     setFixMemoryLoading(true);
     setFixMemory(null);
+    setSimilarFixes(null);
+    loadSimilarFixesForResource(resourceId);
     try {
       const response = await fetch(
         API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/fix-memory?limit=10",
@@ -175,6 +177,24 @@ export default function Home() {
     }
   }
 
+
+
+  async function loadSimilarFixesForResource(resourceId: number) {
+    if (!organizationId) return;
+    setSimilarFixesLoading(true);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/similar-fixes?limit=5",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Resource similar fixes API returned " + response.status);
+      setSimilarFixes(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load recommended fixes");
+    } finally {
+      setSimilarFixesLoading(false);
+    }
+  }
 
   async function loadSimilarFixes(incidentId: number) {
     if (!organizationId) return;
