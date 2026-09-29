@@ -55,6 +55,8 @@ export default function Home() {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [correlation, setCorrelation] = useState<any>(null);
   const [correlationLoading, setCorrelationLoading] = useState(false);
+  const [rca, setRca] = useState<any>(null);
+  const [rcaLoading, setRcaLoading] = useState(false);
 
   async function loadEvents() {
     if (!organizationId) return;
@@ -149,10 +151,30 @@ export default function Home() {
   }
 
 
+
+  async function loadRca(resourceId: number) {
+    if (!organizationId) return;
+    setRcaLoading(true);
+    setRca(null);
+    try {
+      const response = await fetch(
+        API_BASE + "/api/organizations/" + organizationId + "/resources/" + resourceId + "/rca?lookback_minutes=60&limit=25",
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("RCA API returned " + response.status);
+      setRca(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to generate RCA");
+    } finally {
+      setRcaLoading(false);
+    }
+  }
+
   async function loadCorrelation(resourceId: number) {
     if (!organizationId) return;
     setSelectedNodeId(resourceId);
     setCorrelationLoading(true);
+    loadRca(resourceId);
     setCorrelation(null);
     try {
       const response = await fetch(
@@ -257,6 +279,15 @@ export default function Home() {
           )}
 
           {correlationLoading && <p style={{ marginTop: 14, color: "#38bdf8" }}>Analyzing recent infrastructure changes...</p>}
+
+          {rcaLoading && <p style={{ marginTop: 12, color: "#c084fc" }}>Building evidence-based RCA...</p>}
+          {rca && (
+            <div style={{ marginTop: 12, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
+              <strong>Root Cause Analysis</strong>
+              <div style={{ marginTop: 7, color: "#e2e8f0" }}>{rca.root_cause}</div>
+              <div style={{ marginTop: 7, color: "#64748b", fontSize: 12 }}>Confidence: {rca.confidence} · Evidence: {rca.evidence?.length || 0}</div>
+            </div>
+          )}
           {correlation && (
             <div style={{ marginTop: 14, background: "#081321", border: "1px solid #1e293b", borderRadius: 10, padding: 16 }}>
               <strong>Change Correlation</strong>
