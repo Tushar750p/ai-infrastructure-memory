@@ -133,7 +133,7 @@ def add_aws_account(payload: AWSAccountCreate, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/organizations/{organization_id}/aws/accounts")
+@router.get("/organizations/{organization_id}/aws/accounts", dependencies=[Depends(require_org_access)])
 def list_aws_accounts(
     organization_id: int,
     db: Session = Depends(get_db),
