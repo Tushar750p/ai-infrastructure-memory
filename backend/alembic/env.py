@@ -17,7 +17,8 @@ from app.models.user import User  # noqa: F401
 from app.models.organization_membership import OrganizationMembership  # noqa: F401
 from app.models.user_session import UserSession  # noqa: F401
 from app.models.password_reset_token import PasswordResetToken
-from app.models.auth_audit_log import AuthAuditLog  # noqa: F401
+from app.models.auth_audit_log import AuthAuditLog
+from app.models.email_verification_token import EmailVerificationToken  # noqa: F401
 
 config = context.config
 settings = get_settings()
