@@ -9,6 +9,7 @@ from app.database.db import SessionLocal
 from app.models.aws_account import AWSAccount
 from app.services.aws_inventory import sync_aws_inventory
 from app.services.cloudtrail import collect_cloudtrail_events
+from app.services.incident_detection import detect_incidents_for_account
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,22 @@ def sync_all_accounts() -> int:
                 )
             except Exception:
                 logger.exception("CloudTrail collection failed for account %s", account.id)
+
+            try:
+                detected = detect_incidents_for_account(
+                    db,
+                    organization_id=account.organization_id,
+                    aws_account_id=account.id,
+                    lookback_minutes=15,
+                )
+                if detected:
+                    logger.info(
+                        "AIME detected %s candidate incident(s) for account %s",
+                        detected,
+                        account.id,
+                    )
+            except Exception:
+                logger.exception("Incident detection failed for account %s", account.id)
 
             try:
                 discovered = sync_aws_inventory(
