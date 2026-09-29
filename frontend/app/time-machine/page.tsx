@@ -6,7 +6,7 @@ type Event = {
   id?: string;
   event_name?: string;
   event_time?: string;
-  resource_id?: string;
+  resource_id?: number | string;
   resource_type?: string;
   resource_name?: string;
   actor?: string;
@@ -84,7 +84,7 @@ export default function TimeMachinePage() {
           api(`/api/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/anomalies`),
           api(`/api/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/metrics`),
         ]);
-      setEvents(Array.isArray(timeline) ? timeline : timeline.events ?? []);
+      setEvents(Array.isArray(timeline) ? timeline : timeline.timeline ?? timeline.events ?? []);
       setFixes(Array.isArray(fixMemory) ? fixMemory : fixMemory.fixes ?? []);
       setRca(rcaData);
       setCorrelation(correlationData);
@@ -126,7 +126,7 @@ export default function TimeMachinePage() {
             </label>
             <label className="text-sm text-slate-300">
               Resource ID
-              <input value={resourceId} onChange={(e) => setResourceId(e.target.value)} placeholder="i-0123456789 / resource id" className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-cyan-500" />
+              <input value={resourceId} onChange={(e) => setResourceId(e.target.value)} placeholder="Resource ID (numeric)" className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-cyan-500" />
             </label>
             <button onClick={load} disabled={loading} className="self-end rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-50">
               {loading ? "Reconstructing…" : "Reconstruct"}
