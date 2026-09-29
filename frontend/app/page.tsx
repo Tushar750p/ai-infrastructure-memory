@@ -158,6 +158,30 @@ export default function Home() {
     setAuthMessage("Signed out.");
   }
 
+  async function requestPasswordReset() {
+    if (!authEmail) {
+      setAuthMessage("Enter your email first.");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthMessage("");
+    try {
+      const response = await fetch(API_BASE + "/api/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: authEmail, password: "placeholder-password" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Password reset request failed");
+      setAuthMessage("If the account exists, reset instructions have been sent.");
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : "Password reset request failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function register() {
     setAuthLoading(true);
     setAuthMessage("");
@@ -707,6 +731,7 @@ export default function Home() {
                 <input value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="Password (12+ chars)" type="password" style={{ padding: 9, borderRadius: 8, background: "#020617", color: "#e2e8f0", border: "1px solid #334155" }} />
                 <button onClick={login} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: 0, background: "#2563eb", color: "white" }}>Sign in</button>
                 <button onClick={register} disabled={authLoading} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#e2e8f0" }}>Create account</button>
+                <button onClick={requestPasswordReset} disabled={authLoading || !authEmail} style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid #334155", background: "#111827", color: "#94a3b8" }}>Forgot password?</button>
               </div>
             )}
           </div>
