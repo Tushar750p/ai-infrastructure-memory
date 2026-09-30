@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/health/:path*",
-        destination: `${backendUrl.replace(/\\/$/, "")}/health/:path*`,
+        destination: `${backendUrl.replace(/\/$/, "")}/health/:path*`,
       },
     ];
   },
