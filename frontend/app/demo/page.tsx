@@ -35,9 +35,8 @@ export default function DemoLanding() {
             AIME connects infrastructure changes, incidents, telemetry, RCA and verified fixes into a persistent operational memory for engineering teams.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 34 }}>
-            <Link href="/demo/experience" style={{ background: "#38bdf8", color: "#03111d", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 800 }}>
-              Experience AIME Demo →
-            </Link>
+            <Link href="/buyer-demo" style={{ background: "#38bdf8", color: "#03111d", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 800 }}>Open Full AIME Demo Console →</Link>
+            <Link href="/demo/experience" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>Experience Incident Demo</Link>
             <Link href="/" style={{ border: "1px solid #334155", color: "#e2e8f0", padding: "14px 22px", borderRadius: 10, textDecoration: "none", fontWeight: 700 }}>
               Try AIME Console
             </Link>
