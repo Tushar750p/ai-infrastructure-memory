@@ -101,23 +101,98 @@ The interactive demo uses a clearly labeled simulated environment for product de
 
 ## Local Development
 
-### Backend
+The lightweight root `docker-compose.yml` starts **only PostgreSQL and Redis**. Run the Python API and Next.js frontend directly on the host to keep local resource usage lower. Do not use `docker-compose.prod.yml` for everyday laptop development.
+
+### Requirements
+
+- Docker Desktop with the WSL 2 backend (Windows) or Docker Engine (Linux)
+- Python 3.12 recommended
+- Node.js 22 LTS (Node.js 20.9 or newer is required by the installed Next.js version)
+- Git
+
+### 1. Start the local dependencies
+
+From the repository root:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+PostgreSQL is available on `localhost:5432`; Redis is available on `localhost:6379`. The database is persisted in the `aime_pgdata` Docker volume. The default database password is for local development only. Set `AIME_DB_PASSWORD` before starting Compose if you want a different local password.
+
+### 2. Configure the backend
 
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+python -m venv .venv
 ```
 
-### Frontend
+Activate the virtual environment:
+
+- Linux / WSL: `source .venv/bin/activate`
+- Windows PowerShell: `.venv\\Scripts\\Activate.ps1`
+
+Then install dependencies and create the local environment file:
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`. Put the generated Fernet key into `CREDENTIALS_ENCRYPTION_KEY` in `.env`. Set these local values:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg2://postgres:aime_local_dev_only@localhost:5432/infra_memory
+REDIS_URL=redis://localhost:6379/0
+CORS_ALLOWED_ORIGINS=http://localhost:3000
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_NAME=aime_session
+```
+
+If you changed `AIME_DB_PASSWORD` for Compose, use the same password in `DATABASE_URL`. Keep `.env` private; never commit it.
+
+Run database migrations and start the API:
+
+```bash
+alembic upgrade head
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 3. Start the frontend
+
+In a second terminal:
 
 ```bash
 cd frontend
-npm install
+npm ci
+```
+
+Linux / WSL:
+
+```bash
+AIME_BACKEND_URL=http://localhost:8000 npm run dev
+```
+
+Windows PowerShell:
+
+```powershell
+$env:AIME_BACKEND_URL="http://localhost:8000"
 npm run dev
 ```
 
-For containerized deployment and production configuration, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+Open:
+
+- Frontend: http://localhost:3000
+- API documentation: http://localhost:8000/docs
+- Liveness check: http://localhost:8000/health/live
+- Database readiness check: http://localhost:8000/health/ready
+
+The local SMTP values in `.env.example` are placeholders. Email verification and password-reset delivery require a real SMTP provider; they are not configured by this local setup.
+
+For containerized production deployment and production configuration, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Security
 
