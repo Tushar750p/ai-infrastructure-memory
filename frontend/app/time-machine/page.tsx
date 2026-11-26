@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Event = {
   id?: string;
@@ -51,7 +51,7 @@ function Badge({ children }: { children: React.ReactNode }) {
 }
 
 export default function TimeMachinePage() {
-  const [organizationId, setOrganizationId] = useState("");
+  const [organizationId, setOrganizationId] = useState(() => typeof window === "undefined" ? "" : window.sessionStorage.getItem("aime.organizationId") ?? "");
   const [resourceId, setResourceId] = useState("");
   const [events, setEvents] = useState<Event[]>([]);
   const [fixes, setFixes] = useState<Fix[]>([]);
@@ -61,11 +61,6 @@ export default function TimeMachinePage() {
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    const savedOrg = sessionStorage.getItem("aime.organizationId") ?? "";
-    setOrganizationId(savedOrg);
-  }, []);
 
   const load = async () => {
     if (!organizationId || !resourceId) {
