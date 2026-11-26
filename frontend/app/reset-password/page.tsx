@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -63,7 +64,7 @@ export default function ResetPasswordPage() {
         ) : success ? (
           <div>
             <p style={{ color: "#4ade80" }}>{message}</p>
-            <a href="/" style={{ color: "#38bdf8" }}>Return to sign in</a>
+            <Link href="/" style={{ color: "#38bdf8" }}>Return to sign in</Link>
           </div>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 12, marginTop: 20 }}>
