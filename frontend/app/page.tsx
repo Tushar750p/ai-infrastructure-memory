@@ -751,6 +751,7 @@ export default function Home() {
   }
 
   return (
+    <>
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px 0", display: "flex", justifyContent: "flex-end" }}><Link href="/demo" style={{ color: "#7dd3fc", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← AIME Product Overview</Link></div><div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 22 }}>
   <Link href="/reports" style={{ background: "#0b1728", border: "1px solid #334155", borderRadius: 9, padding: "9px 13px", color: "#cbd5e1", textDecoration: "none", fontSize: 13 }}>SRE Reports →</Link>
   <Link href="/time-machine" style={{ background: "#0b1728", border: "1px solid #334155", borderRadius: 9, padding: "9px 13px", color: "#cbd5e1", textDecoration: "none", fontSize: 13 }}>Time Machine →</Link>
@@ -1102,6 +1103,7 @@ export default function Home() {
         </section>
       </div>
     </main>
+    </>
   );
 }
 
