@@ -4,18 +4,16 @@ import { useEffect, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+type ReportEvent = { id: number; event_name?: string; event_time?: string; summary?: string; aws_account_id?: number; region?: string; resource_id?: string; actor?: string };
+type ReportIncident = { id: number; title?: string; status?: string; summary?: string; severity?: string; started_at?: string; root_cause?: string };
+
 export default function ReportsPage() {
-  const [organizationId, setOrganizationId] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [events, setEvents] = useState<any[]>([]);
-  const [incidents, setIncidents] = useState<any[]>([]);
+  const [organizationId, setOrganizationId] = useState(() => typeof window === "undefined" ? "" : window.sessionStorage.getItem("aime.organizationId") || "");
+  const [apiKey, setApiKey] = useState(() => typeof window === "undefined" ? "" : window.sessionStorage.getItem("aime.apiKey") || "");
+  const [events, setEvents] = useState<ReportEvent[]>([]);
+  const [incidents, setIncidents] = useState<ReportIncident[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setOrganizationId(window.sessionStorage.getItem("aime.organizationId") || "");
-    setApiKey(window.sessionStorage.getItem("aime.apiKey") || "");
-  }, []);
 
   async function loadReport() {
     if (!organizationId) {
@@ -50,7 +48,7 @@ export default function ReportsPage() {
           <div>
             <div style={{ color: "#38bdf8", fontSize: 12, fontWeight: 800, letterSpacing: ".12em" }}>AIME · SRE REPORTS</div>
             <h1 style={{ fontSize: 34, margin: "8px 0 4px" }}>Infrastructure & Incident Report</h1>
-            <p style={{ color: "#94a3b8", margin: 0 }}>A production-safe reporting surface built from AIME's real infrastructure memory APIs.</p>
+            <p style={{ color: "#94a3b8", margin: 0 }}>A production-safe reporting surface built from AIME&apos;s real infrastructure memory APIs.</p>
           </div>
           <button onClick={() => window.print()} style={{ padding: "11px 16px", borderRadius: 9, border: "1px solid #334155", background: "#0f1d30", color: "#e2e8f0", fontWeight: 700 }}>Print / Save PDF</button>
         </div>
