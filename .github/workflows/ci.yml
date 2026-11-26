@@ -38,6 +38,10 @@ jobs:
         working-directory: backend
         run: python -m compileall -q app
 
+      - name: Run backend unit tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
+
   frontend:
     name: Frontend lint and production build
     runs-on: ubuntu-latest
